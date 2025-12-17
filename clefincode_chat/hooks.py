@@ -83,7 +83,7 @@ page_js ={"chat-portal" : "public/js/chat_portal/chat_portal.js"}
 # before_install = "clefincode_chat.install.before_install"
 after_install = "clefincode_chat.setup.install.after_install"
 after_migrate  = "clefincode_chat.setup.after_migrate.after_migrate"
-# Uninstallation
+before_migrate = "clefincode_chat.setup.before_migrate.run_setup_requirements"# 
 # ------------
 
 # before_uninstall = "clefincode_chat.uninstall.before_uninstall"
