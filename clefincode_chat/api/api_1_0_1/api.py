@@ -2474,7 +2474,7 @@ def get_contact_first_name(contact):
     first_name = frappe.db.sql(f"""
         SELECT ChatProfile.full_name
         FROM `tabClefinCode Chat Profile` AS ChatProfile, `tabClefinCode Chat Profile Contact Details` AS ContactDetails
-        WHERE ContactDetails.parent = ChatProfile.name AND ChatProfile.is_support <> 1 AND ContactDetails.contact_info = '{contact}'
+        WHERE ContactDetails.parent = ChatProfile.name  AND ContactDetails.contact_info = '{contact}'
         """ , as_dict = True)
     if first_name:
         return first_name[0].full_name.split(' ')[0]
@@ -2484,7 +2484,7 @@ def get_contact_full_name(contact):
     full_name = frappe.db.sql(f"""
         SELECT ChatProfile.full_name
         FROM `tabClefinCode Chat Profile` AS ChatProfile, `tabClefinCode Chat Profile Contact Details` AS ContactDetails
-        WHERE ContactDetails.parent = ChatProfile.name AND ChatProfile.is_support <> 1 AND ContactDetails.contact_info = '{contact}'
+        WHERE ContactDetails.parent = ChatProfile.name AND ContactDetails.contact_info = '{contact}'
         """ , as_dict = True)
     if full_name:
         return full_name[0].full_name
@@ -2493,7 +2493,7 @@ def get_profile_id(user_email):
     user_profile = frappe.db.sql(f"""
     SELECT DISTINCT parent 
     FROM `tabClefinCode Chat Profile Contact Details` AS ContactDetails INNER JOIN `tabClefinCode Chat Profile` AS ERPNextChatProfile 
-    ON ERPNextChatProfile.name = ContactDetails.parent AND ERPNextChatProfile.is_support <> 1
+    ON ERPNextChatProfile.name = ContactDetails.parent 
     WHERE contact_info = '{user_email}'
     """ , as_dict = True)
     if user_profile:
@@ -2504,7 +2504,7 @@ def get_profile_full_name(user_email):
     full_name = frappe.db.sql(f"""
     SELECT DISTINCT ERPNextChatProfile.full_name
     FROM `tabClefinCode Chat Profile` AS ERPNextChatProfile , `tabClefinCode Chat Profile Contact Details` AS ContactDetails
-    WHERE ERPNextChatProfile.name = ContactDetails.parent AND ERPNextChatProfile.is_support <> 1 AND ContactDetails.contact_info = '{user_email}'
+    WHERE ERPNextChatProfile.name = ContactDetails.parent AND ContactDetails.contact_info = '{user_email}'
     """ , as_dict = True)
     if full_name:
         return full_name[0].full_name
@@ -2513,7 +2513,7 @@ def get_support_profile_id(user_email):
     user_profile = frappe.db.sql(f"""
     SELECT DISTINCT parent 
     FROM `tabClefinCode Chat Profile Contact Details` AS ContactDetails INNER JOIN `tabClefinCode Chat Profile` AS ERPNextChatProfile 
-    ON ERPNextChatProfile.name = ContactDetails.parent AND ERPNextChatProfile.is_support = 1
+    ON ERPNextChatProfile.name = ContactDetails.parent
     WHERE contact_info = '{user_email}'
     """ , as_dict = True)
     if user_profile:
