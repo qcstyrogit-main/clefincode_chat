@@ -36,10 +36,7 @@ from frappe.utils import now_datetime
 from frappe.utils import get_files_path, get_url
 from frappe.utils.file_manager import save_file
 from frappe.utils.pdf import get_pdf
-import shutil
-import os
-import threading
-import time
+
 
 
 
@@ -458,7 +455,7 @@ def create_channel(channel_name , users, type , last_message , creator_email , c
     })
     room_doc.insert(ignore_permissions=True)
     for user in json.loads(users):
-        room_doc.append("members" , {"profile_id" : user.get("profile_id") or get_profile_id(user["email"]) ,"user" : user["email"] , "platform" : user["platform"], "platform_profile": user.get("platform_profile"), "platform_gateway": user.get("platform_gateway")})
+        room_doc.append("members" , {"profile_id" : get_profile_id(user["email"]) ,"user" : user["email"] , "platform" : user["platform"], "platform_profile": user.get("platform_profile"), "platform_gateway": user.get("platform_gateway")})
         share_doctype("ClefinCode Chat Channel", room_doc.name, user["email"])
     room_doc.save(ignore_permissions=True)
     frappe.db.commit()
@@ -4924,7 +4921,6 @@ def send_whatsapp_message_twilio(new_message_doc, sender, receiver, message, mes
         if message_type in ['image', 'video', 'audio', 'document']:
 
             original_url = message
-            
             site_url = frappe.utils.get_url()
 
             # ------------------------------------------
@@ -5026,7 +5022,7 @@ def send_whatsapp_message_twilio(new_message_doc, sender, receiver, message, mes
                     time_delay=60,
                     queue='default',
                     timeout=600,
-                  
+                    at=frappe.utils.add_to_date(frappe.utils.now_datetime(), seconds=60)
                 )
 
         else:
@@ -5080,7 +5076,6 @@ def send_whatsapp_message_from_template(new_message, to_number, whatsapp_profile
     is_document = None
     file_type = None
     media_url = None
-    link=None
     from bs4 import BeautifulSoup
 
     content = new_message.content
@@ -5204,10 +5199,9 @@ def send_whatsapp_message_from_template(new_message, to_number, whatsapp_profile
                                 print_format=template.print_format,
                                 lang=template.language_format,
                                 letterhead=template.letter_head,
-                                is_private=template.is_private
+                                is_private=False
                             )
                     link_attach=res['file_url']
-                   
                     file_id=res['file_id']
                     if template.media_url:
                         attach_var= extract_placeholder(template.media_url)
@@ -5216,8 +5210,6 @@ def send_whatsapp_message_from_template(new_message, to_number, whatsapp_profile
                             variables[attach_var] = urllib.parse.quote(link, safe=':/')
                             if attach_var in variables:
                                 media_url=template.media_url.replace(f"{{{{{attach_var}}}}}", str( variables[attach_var]))
-
-                                frappe.log_error("sds",media_url)
                     
         if attachment:
             if template.media_url:
@@ -5250,47 +5242,6 @@ def send_whatsapp_message_from_template(new_message, to_number, whatsapp_profile
         is_document = 1
     if file_id is None and media_url:
        file_id = get_file_id_from_url(media_url)
-
-    attach_var= extract_placeholder(template.media_url)
-    if link:
-        variables[attach_var] = urllib.parse.quote(variables[attach_var], safe=':/')
-        frappe.log_error("link link ",link)
-        file_info = frappe.db.get_value(
-                    "File", {"file_url": f"/{link}"},
-                    ["name", "is_private", "file_url"], as_dict=True
-                )
-        was_private = file_info.is_private
-        if was_private:
-                    # Load original file content
-                    file_path = frappe.get_site_path(file_info.file_url.lstrip("/"))
-                    with open(file_path, "rb") as f:
-                        content = f.read()
-
-                    # Create a new public file
-                    new_public_file = frappe.get_doc({
-                        "doctype": "File",
-                        "file_name": f"temp_{os.path.basename(file_info.file_url)}",
-                        "content": content,
-                        "is_private": 0,  # Public
-                        "attached_to_doctype": template.reference_doctype,
-                        "attached_to_name": doc.name
-                    })
-
-                    new_public_file.insert(ignore_permissions=True)
-                    frappe.db.commit()
-
-                    public_url = new_public_file.file_url 
-                  
-                    variables[attach_var] = urllib.parse.quote(public_url.lstrip('/'), safe=':/')
-                    frappe.enqueue(
-                    "clefincode_chat.api.api_1_3_1.api.delete_temp_public_file",
-                    file_url=public_url,
-                    time_delay=60,
-                    queue='default',
-                    timeout=600,
-                    
-                )
-                    frappe.log_error("dssd",[public_url,variables[attach_var]])
     message = client.messages.create(
         from_=f"whatsapp:{from_number}",
         to=f"whatsapp:{to_number}",
@@ -5309,7 +5260,7 @@ def send_whatsapp_message_from_template(new_message, to_number, whatsapp_profile
     # frappe.publish_realtime(event=room, message=results, user=new_message.sender_email)
     # frappe.publish_realtime(event="update_room", message=results, user= new_message.sender_email)
     #send_notification(member.user , results, "send_message", room_name if channel_doc.type == "Group" else get_contact_full_name(email), message_template_type) 
-   
+    
    
     send(content=html, user=to_number, room=new_message.chat_channel, email=to_number,is_media=is_media,is_document=is_document,file_id=file_id)
    
@@ -5944,12 +5895,11 @@ def send_clefincode_chat_template(new_message):
                             print_format=template.print_format,
                             lang=template.language,
                             letterhead=template.letter_head,
-                            is_private=True
+                            is_private=False
                         )
 
         # Build download link
         pdf_url = frappe.utils.get_url(pdf_result['file_url'])
-        secure_pdf_url = frappe.utils.get_url(pdf_result['access_url'])
 
         # pdf_html = f"""
         #     <div style="font-family: Arial; font-size:14px; padding:10px;">
@@ -5962,7 +5912,7 @@ def send_clefincode_chat_template(new_message):
         #         </a>
         #     </div>
         # """
-        send( handle_pdf_attachment(pdf_result['file_url'], pdf_result['file_name']),new_message.sender, new_message.chat_channel , template.owner,  attachment = secure_pdf_url , sub_channel = None , is_link = None , is_media = None , is_document = 1,file_id=pdf_result['file_id'])
+        send( handle_pdf_attachment(pdf_result['file_url'], pdf_result['file_name']),new_message.sender, new_message.chat_channel , template.owner,  attachment = pdf_result['file_url'] , sub_channel = None , is_link = None , is_media = None , is_document = 1,file_id=pdf_result['file_id'])
         # Send PDF as attachment
         # send(
         #     pdf_html,
@@ -6113,7 +6063,6 @@ def get_documents_by_doctype(doctype, page=1, search=None):
 
 
 #====================================================
-
 def pdf(doctype, name, key, format=None, lang=None, letterhead=None):
     import subprocess
     import tempfile
@@ -6126,14 +6075,7 @@ def pdf(doctype, name, key, format=None, lang=None, letterhead=None):
         frappe.throw("wkhtmltopdf is not installed on this server.")
 
     created_letterhead_flag = False
-    
 
-    DEFAULT_FOLDER = "CiC Chat Template PDF"  
-
-    
-   
-    create_folder_if_not_exists(DEFAULT_FOLDER,"Home/Attachments")
-    save_folder = folder or DEFAULT_FOLDER
     try:
         from packaging import version
         frappe_version = frappe.__version__
@@ -6147,18 +6089,13 @@ def pdf(doctype, name, key, format=None, lang=None, letterhead=None):
             frappe.flags.current_letterhead = letterhead
             created_letterhead_flag = True
 
-            original_ignore = frappe.flags.get('ignore_permissions', False)
-        frappe.flags.ignore_permissions = True
-        try:
-            html = frappe.get_print(
-                doctype,
-                name,
-                print_format=format,
-                doc=doc,
-                no_letterhead=0
-            )
-        finally:
-            frappe.flags.ignore_permissions = original_ignore  
+        html = frappe.get_print(
+            doctype,
+            name,
+            print_format=format,
+            doc=doc,
+            no_letterhead=0
+        )
         site_url = frappe.utils.get_url()
 
         # Convert all src="/..." to src="https://your-site.com/..."
@@ -6203,7 +6140,7 @@ def pdf(doctype, name, key, format=None, lang=None, letterhead=None):
             pdf_data = f.read()
 
         file_name = f"{doctype}_{name.replace(' ', '_')}.pdf"
-        _file = save_file(file_name, pdf_data, doctype, name, is_private=False,folder=f"Home/Attachments/{DEFAULT_FOLDER}")
+        _file = save_file(file_name, pdf_data, doctype, name, is_private=False)
 
         return {
             "status": "success",
@@ -6221,7 +6158,6 @@ def pdf(doctype, name, key, format=None, lang=None, letterhead=None):
             del frappe.flags.current_letterhead        
             
             
-
             
 def handle_pdf_attachment(file_url, file_name):
     """Return HTML content for a PDF file attachment, similar to the JS handle_attachment function."""
@@ -6486,27 +6422,19 @@ def generate_pdf_with_wkhtml(html, options=None):
     subprocess.run(command, check=True)
 
     return pdf_out.name
-
 def generate_pdf_with_getpdf(
     doctype,
     name,
     print_format=None,
     lang=None,
     letterhead=None,
-    is_private=True,
-   
-    
+    is_private=False
 ):
     import frappe
 
-  
-    doc = frappe.get_doc(doctype, name, ignore_permissions=True)
-    DEFAULT_FOLDER = "CiC Chat Template PDF"  
+    doc = frappe.get_doc(doctype, name)
 
-    
-   
-    create_folder_if_not_exists(DEFAULT_FOLDER,"Home/Attachments")
-
+ 
     if lang:
         frappe.local.lang = lang
 
@@ -6514,21 +6442,16 @@ def generate_pdf_with_getpdf(
     if letterhead:
         frappe.flags.current_letterhead = letterhead
 
-    
-    original_ignore = frappe.flags.get('ignore_permissions', False)
-    frappe.flags.ignore_permissions = True
-    try:
-        html = frappe.get_print(
-            doctype,
-            name,
-            print_format=print_format,
-            doc=doc,
-            no_letterhead=0
-        )
-    finally:
-        frappe.flags.ignore_permissions = original_ignore 
+    # Generate HTML
+    html = frappe.get_print(
+        doctype,
+        name,
+        print_format=print_format,
+        doc=doc,
+        no_letterhead=0
+    )
 
-    
+    # Generate PDF (bytes)
     pdf_data = get_pdf(html)
 
     # Save file
@@ -6538,95 +6461,12 @@ def generate_pdf_with_getpdf(
         pdf_data,
         doctype,
         name,
-        is_private=is_private,
-        folder=f"Home/Attachments/{DEFAULT_FOLDER}"
+        is_private=is_private
     )
-
-   
-    
 
     return {
         "status": "success",
         "file_url": file_doc.file_url,
-      
         "file_name": file_name,
         "file_id": file_doc.name
     }
-
-@frappe.whitelist()
-def get_template_suggestions(user, platform="Chat", text=""):
-    if not text or not text.startswith("/"):
-        return []
-
-    templates = []
-
-    if platform == "Chat":
-        templates = frappe.get_all(
-            "Clefincode Chat Template",
-            fields=["name", "friendly_name as meta_template_name"]
-        )
-        for t in templates:
-            t["doctype"] = "Clefincode Chat Template"
-
-    elif platform == "WhatsApp":
-        profile = frappe.get_all(
-            "ClefinCode WhatsApp Profile",
-            filters={"user": user},
-            fields=["name"]
-        )
-
-        if profile:
-            templates = frappe.get_all(
-                "ClefinCode WhatsApp Template",
-                filters={
-                    "docstatus": 1,
-                    "whatsapp_profile": profile[0].name,
-                    "template_status": "APPROVED"
-                },
-                fields=["name", "meta_template_name"]
-            )
-            for t in templates:
-                t["doctype"] = "ClefinCode WhatsApp Template"
-
-        twilio_templates = frappe.get_all(
-            "CiC Twilio Template",
-            filters={
-                "whatsapp_template_id": ["is", "set"],
-                "template_status": "APPROVED"
-            },
-            fields=["name", "friendly_name as meta_template_name"]
-        )
-        for t in twilio_templates:
-            t["doctype"] = "CiC Twilio Template"
-
-        templates += twilio_templates
-
-    return templates
-
-
-
-
-def create_folder_if_not_exists(folder_name, parent_folder="Home"):
-    # Check if folder already exists
-    exists = frappe.db.exists(
-        "File",
-        {
-            "file_name": folder_name,
-            "is_folder": 1,
-            "folder": parent_folder
-        }
-    )
-
-    if not exists:
-        folder = frappe.get_doc({
-            "doctype": "File",
-            "file_name": folder_name,
-            "is_folder": 1,
-            "folder": parent_folder
-        })
-        folder.insert(ignore_permissions=True)
-        return folder.name
-
-    return exists
-
-
