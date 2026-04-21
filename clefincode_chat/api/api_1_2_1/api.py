@@ -1318,7 +1318,80 @@ def get_messages(room , user_email , room_type , chat_topic = None, remove_date 
         message.send_date = convert_utc_to_user_timezone(message.send_date, get_user_timezone(user_email)["results"][0]["time_zone"])
         message.time_zone = get_user_timezone(user_email)["results"][0]["time_zone"]         
         message.get_messages = 1
+        # Attach reaction data
+        message.reactions = get_reactions_for_message(message.message_name)
     return {"results" : sorted(results, key=lambda d: d["send_date"])}
+# ==========================================================================================
+def get_reactions_for_message(message_name):
+    """Return aggregated reactions for a single message."""
+    try:
+        rows = frappe.db.sql("""
+            SELECT emoji, COUNT(*) AS reaction_count, GROUP_CONCAT(user) AS users
+            FROM `tabClefinCode Chat Message Reaction`
+            WHERE message = %s
+            GROUP BY emoji
+            ORDER BY reaction_count DESC
+        """, (message_name,), as_dict=True)
+        result = []
+        for row in rows:
+            result.append({
+                "emoji": row.emoji,
+                "count": row.reaction_count,
+                "users": [u.strip() for u in (row.users or "").split(",") if u.strip()]
+            })
+        return result
+    except Exception:
+        return []
+# ==========================================================================================
+@frappe.whitelist()
+def toggle_message_reaction(message_name, emoji, user_email, room):
+    """Toggle a reaction on a message. Adds if not present, removes if already reacted."""
+    try:
+        # Check if this user already reacted with this emoji
+        existing = frappe.db.get_value(
+            "ClefinCode Chat Message Reaction",
+            {"message": message_name, "user": user_email, "emoji": emoji},
+            "name"
+        )
+        if existing:
+            frappe.delete_doc("ClefinCode Chat Message Reaction", existing, ignore_permissions=True)
+        else:
+            reaction_doc = frappe.get_doc({
+                "doctype": "ClefinCode Chat Message Reaction",
+                "message": message_name,
+                "user": user_email,
+                "emoji": emoji
+            })
+            reaction_doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        # Fetch updated reactions for this message
+        updated_reactions = get_reactions_for_message(message_name)
+
+        # Broadcast to all channel members
+        realtime_payload = {
+            "realtime_type": "reaction_update",
+            "message_name": message_name,
+            "reactions": updated_reactions,
+            "room": room
+        }
+
+        # Get all members of the channel to broadcast
+        try:
+            channel_members = frappe.db.sql("""
+                SELECT DISTINCT user FROM `tabClefinCode Chat Channel User`
+                WHERE parent = %s AND platform = 'Chat'
+            """, (room,), as_dict=True)
+            for member in channel_members:
+                frappe.publish_realtime(event=room, message=realtime_payload, user=member.user)
+        except Exception:
+            # Fallback: broadcast to room event
+            frappe.publish_realtime(event=room, message=realtime_payload)
+
+        return {"results": [{"status": "ok", "reactions": updated_reactions}]}
+    except Exception as e:
+        frappe.log_error(title="toggle_message_reaction error", message=str(e))
+        return {"results": [{"status": "error", "message": str(e)}]}
 # ==========================================================================================
 @frappe.whitelist()
 def get_messages_latest(room , user_email , room_type, remove_date = None , lastmessagedate = None):
@@ -1362,6 +1435,9 @@ def get_messages_latest(room , user_email , room_type, remove_date = None , last
         message.send_date = convert_utc_to_user_timezone(message.send_date, get_user_timezone(user_email)["results"][0]["time_zone"])
         message.time_zone = get_user_timezone(user_email)["results"][0]["time_zone"]         
         message.get_messages = 1
+        # Attach reactions
+        message.reactions = get_reactions_for_message(message.message_name)
+        
     return {"results" : sorted(results, key=lambda d: d["send_date"])}
 
 # ==========================================================================================

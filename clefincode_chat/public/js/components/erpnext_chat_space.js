@@ -30,6 +30,8 @@ import ChatInfo from "./erpnext_chat_info";
 import VoiceClip from "./voice_clip_widget";
 import ChatWindow from "./erpnext_chat_window";
 import { add_group_member, create_group } from "./erpnext_chat_contact_list";
+import EmojiPicker from "./emoji_picker";
+
 
 export default class ChatSpace {
   constructor(opts) {
@@ -617,6 +619,9 @@ export default class ChatSpace {
       <div class="message-section">
           ${this.profile.room_type != "Guest" ? file_attachment : ``}
           ${this.type_message_input.wrapper}
+          <span class='cc-ep-trigger' title='Emoji'>
+              😊
+          </span>
           <span class='message-send-button' style="display:none">
               <svg xmlns="http://www.w3.org/2000/svg" width="1.1rem" height="1.1rem" viewBox="0 0 24 24">
                   <path d="M24 0l-6 22-8.129-7.239 7.802-8.234-10.458 7.227-7.215-1.754 24-12zm-15 16.668v7.332l3.258-4.431-3.258-2.901z"/>
@@ -644,6 +649,50 @@ export default class ChatSpace {
 
   setup_events() {
     const me = this;
+
+    // --- REACTION EVENTS (DELEGATED) ---
+    // 1. Quick reaction click
+    this.$chat_space.on("click", ".cc-quick-react", function(e) {
+      const emoji = $(this).data("emoji");
+      const message_name = $(this).closest(".cc-message-wrapper").data("message-name");
+      const room = me.profile.room_type === "Contributor" ? me.profile.parent_channel : me.profile.room;
+      
+      frappe.call({
+        method: "clefincode_chat.api.api_1_2_1.api.toggle_message_reaction",
+        args: { message_name, emoji, user_email: me.profile.user_email, room }
+      });
+    });
+
+    // 2. Open full picker for reactions
+    this.$chat_space.on("click", ".cc-open-full-picker", function(e) {
+      const message_name = $(this).closest(".cc-message-wrapper").data("message-name");
+      new EmojiPicker({
+        anchor: $(this),
+        mode: "reaction",
+        chat_space: me,
+        message_name: message_name
+      });
+    });
+
+    // 3. Click reaction badge to toggle
+    this.$chat_space.on("click", ".cc-reaction-badge", function(e) {
+      const emoji = $(this).data("emoji");
+      const message_name = $(this).closest(".cc-reaction-bar").data("message");
+      const room = me.profile.room_type === "Contributor" ? me.profile.parent_channel : me.profile.room;
+
+      frappe.call({
+        method: "clefincode_chat.api.api_1_2_1.api.toggle_message_reaction",
+        args: { message_name, emoji, user_email: me.profile.user_email, room }
+      });
+    });
+
+    this.$chat_space.find(".cc-ep-trigger").on("click", function () {
+      new EmojiPicker({
+        anchor: $(this),
+        mode: "input",
+        chat_space: me,
+      });
+    });
 
     this.$chat_space
       .find(".topic-request-access")
@@ -1222,6 +1271,7 @@ export default class ChatSpace {
         type: message_type,
         sender: element.sender,
         message_name: element.message_name,
+        reactions: element.reactions || [],
         message_template_type: element.message_template_type,
         get_messages: element.get_messages,
       });
@@ -1314,11 +1364,30 @@ export default class ChatSpace {
     } = params;
     const $recipient_element = $(document.createElement("div"))
       .addClass(type)
+      .addClass("cc-message-wrapper")
       .attr("data-message-name", message_name);
 
     const $message_element = $(document.createElement("div")).addClass(
       "message-bubble"
     );
+
+    // Messenger-style hover reaction bar
+    if (type !== "info-message") {
+      const $actions_bar = $(`
+        <div class="cc-message-hover-actions">
+          <div class="cc-quick-reactions">
+            <span class="cc-quick-react" data-emoji="👍">👍</span>
+            <span class="cc-quick-react" data-emoji="❤️">❤️</span>
+            <span class="cc-quick-react" data-emoji="😂">😂</span>
+            <span class="cc-quick-react" data-emoji="😮">😮</span>
+            <span class="cc-quick-react" data-emoji="😢">😢</span>
+            <span class="cc-quick-react" data-emoji="😡">😡</span>
+            <span class="cc-open-full-picker" title="More...">➕</span>
+          </div>
+        </div>
+      `);
+      $recipient_element.append($actions_bar);
+    }
 
     const $name_element = $(document.createElement("div"))
       .addClass("message-name")
@@ -1521,6 +1590,13 @@ export default class ChatSpace {
       }
       // ===========================================
       $recipient_element.html($sanitized_content);
+    }
+
+    // Add reaction bar container
+    if (type !== "info-message") {
+      const $reaction_bar = $(`<div class="cc-reaction-bar" data-message="${message_name}"></div>`);
+      this.render_reactions($reaction_bar, params.reactions || []);
+      $recipient_element.append($reaction_bar);
     }
 
     const me = this;
@@ -2706,6 +2782,8 @@ export default class ChatSpace {
         me.reference_doctypes = me.reference_doctypes.concat(
           res.mention_doctypes
         );
+      } else if (res.realtime_type == "reaction_update") {
+        me.update_message_reactions(res.message_name, res.reactions);
       } else if (res.realtime_type == "remove_topic") {
         me.$chat_space.find(".mentioned-doctype-section").remove();
         me.chat_topic = null;
@@ -3458,6 +3536,33 @@ insertTemplateText (text) {
       }, 60000);
     } else {
       this.$chat_space.find(".chat-profile-status").text("");
+    }
+  }
+
+  render_reactions($container, reactions) {
+    if (!$container) return;
+    $container.empty();
+    if (!reactions || reactions.length === 0) return;
+
+    reactions.forEach(react => {
+      const is_active = react.users.includes(this.profile.user_email);
+      const usernames = react.users.join(", ");
+      const $badge = $(`
+        <span class="cc-reaction-badge ${is_active ? 'active' : ''}" 
+              data-emoji="${react.emoji}" 
+              title="${usernames}">
+          <span class="cc-rb-emoji">${react.emoji}</span>
+          <span class="cc-rb-count">${react.count}</span>
+        </span>
+      `);
+      $container.append($badge);
+    });
+  }
+
+  update_message_reactions(message_name, reactions) {
+    const $reaction_bar = this.$chat_space.find(`.cc-reaction-bar[data-message="${message_name}"]`);
+    if ($reaction_bar.length > 0) {
+      this.render_reactions($reaction_bar, reactions);
     }
   }
 } //End class ChatSpace
