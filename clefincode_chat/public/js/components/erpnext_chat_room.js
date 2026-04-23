@@ -125,7 +125,13 @@ export default class ChatRoom {
       );
 
       if (isHTML(last_message_after_update)) {
-        last_message_text = $(last_message_after_update).text().trim();
+        const $temp = $("<div>").html(last_message_after_update);
+        // Replace emoji images with their text equivalents for correct preview calculation
+        $temp.find("img.cc-twemoji, img.cc-twemoji-input").each(function () {
+          const emoji = $(this).attr("data-emoji") || $(this).attr("alt") || "";
+          $(this).replaceWith(emoji);
+        });
+        last_message_text = $temp.text().trim();
       } else {
         last_message_text = last_message_after_update
           ? last_message_after_update.trim()

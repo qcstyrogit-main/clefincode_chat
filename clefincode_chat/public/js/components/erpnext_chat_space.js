@@ -164,7 +164,7 @@ export default class ChatSpace {
     }
     this.profile.room || this.chat_topic_space
       ? await this.fetch_and_setup_messages()
-      : this.create_empty_space();
+      : this.setup_socketio(); // Suppressed: no "No messages" placeholder
     await this.get_topic_info();
   }
 
@@ -597,9 +597,7 @@ export default class ChatSpace {
           </button>
         </div>
       </div>
-      <input type='file' id='chat-file-uploader' style='display: none;'>`;
-
-    const chat_actions_html = `
+      <input type='file' id='chat-file-uploader' style='display: none;'>`;    const chat_actions_html = `
       <div class="cc-reply-preview-container">
         <div class="cc-reply-preview-content">
           <div class="cc-reply-user"></div>
@@ -608,20 +606,18 @@ export default class ChatSpace {
         <div class="cc-reply-close"><i class="fa fa-times"></i></div>
       </div>
       <div class="message-section">
+          ${this.profile.room_type != "Guest" ? file_attachment : ``}
           <div class="cc-composer-shell">
-            <div class="cc-input-pill">
-              ${this.type_message_input.wrapper}
-            </div>
-            <div class="cc-composer-actions">
-              ${this.profile.room_type != "Guest" ? file_attachment : ``}
-              <div class="cc-action-group">
+            <div class="cc-composer-main">
+              <div class="cc-input-pill">
+                ${this.type_message_input.wrapper}
                 <span class='cc-ep-trigger' title='Emoji'>
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="#65676b"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-3.5-9c.828 0 1.5-.672 1.5-1.5S9.328 8 8.5 8 7 8.672 7 9.5s.672 1.5 1.5 1.5zm7 0c.828 0 1.5-.672 1.5-1.5S16.328 8 15.5 8 14 8.672 14 9.5s.672 1.5 1.5 1.5zm-3.5 6.5c2.33 0 4.314-1.548 4.903-3.67.114-.41-.128-.83-.538-.943-.41-.114-.83.128-.943.538-.415 1.503-1.802 2.575-3.422 2.575s-3.007-1.072-3.422-2.575c-.114-.41-.533-.652-.943-.538-.41.114-.652.533-.538.943.589 2.122 2.573 3.67 4.903 3.67z"></path></svg>
-                </span>
-                <span class='message-send-button' style="display:none">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="white"><path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"></path></svg>
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="#0084ff"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-3.5-9c.828 0 1.5-.672 1.5-1.5S9.328 8 8.5 8 7 8.672 7 9.5s.672 1.5 1.5 1.5zm7 0c.828 0 1.5-.672 1.5-1.5S16.328 8 15.5 8 14 8.672 14 9.5s.672 1.5 1.5 1.5zm-3.5 6.5c2.33 0 4.314-1.548 4.903-3.67.114-.41-.128-.83-.538-.943-.41-.114-.83.128-.943.538-.415 1.503-1.802 2.575-3.422 2.575s-3.007-1.072-3.422-2.575c-.114-.41-.533-.652-.943-.538-.41.114-.652.533-.538.943.589 2.122 2.573 3.67 4.903 3.67z"></path></svg>
                 </span>
               </div>
+              <span class='message-send-button' style="display:none">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="#0084ff"><path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"></path></svg>
+              </span>
             </div>
           </div>
       </div>
@@ -689,7 +685,7 @@ export default class ChatSpace {
       $preview.addClass("visible");
 
       // Focus the input
-      me.$chat_actions.find(".ql-editor").focus();
+      me.$chat_actions.find(".type-message").focus();
     });
 
     this.$chat_space.on(
@@ -1211,21 +1207,19 @@ export default class ChatSpace {
         if (me.profile.room) {
           // Only call setupTypingIndicator if it's not already active
           if (!me.isTypingIndicatorActive) {
-              const textValue = $(this).find(".ql-editor").text();
-           console.log(typeof textValue);
+            const textValue = $(this).val();
 
-          if (!me.isTypingIndicatorActive) {
-            if (textValue.startsWith("/") && textValue.length === 1) {
-              
-              me.setupTypingIndicator(textValue);
-            } else {
-              me.setupTypingIndicator();
-              const container = document.querySelector("#template-suggestions");
-              if (container) container.remove();
+            if (!me.isTypingIndicatorActive) {
+              if (textValue.startsWith("/") && textValue.length === 1) {
+                me.setupTypingIndicator(textValue);
+              } else {
+                me.setupTypingIndicator();
+                const container = document.querySelector("#template-suggestions");
+                if (container) container.remove();
+              }
+              me.isTypingIndicatorActive = true;
             }
-            me.isTypingIndicatorActive = true;
-          }
-           else {
+            else {
               const container = document.querySelector("#template-suggestions");
               if (container) container.remove();
             }
@@ -1234,13 +1228,14 @@ export default class ChatSpace {
 
         me.toggle_voice_clip_icon();
 
-        if (contains_arabic($(this).find(".ql-editor").find("p").text())) {
-          $(this).find(".ql-editor").css({
+        const text = $(this).val();
+        if (contains_arabic(text)) {
+          $(this).css({
             direction: "rtl",
             "text-align": "right",
           });
         } else {
-          $(this).find(".ql-editor").css({
+          $(this).css({
             direction: "ltr",
             "text-align": "left",
           });
@@ -1254,18 +1249,13 @@ export default class ChatSpace {
       this.$chat_actions.find(".type-message").on("keydown", function (e) {
         me.toggle_voice_clip_icon();
 
-        if (!me.type_message_input || !me.type_message_input.quill) return;
-
-        const mention_module = me.type_message_input.quill.getModule('mention');
-        const is_mention_open = mention_module ? mention_module.isOpen : false;
+        if (!me.type_message_input) return;
 
         if (e.which === 13) {
-          if (is_mention_open) {
-            return;
-          }
+          // Since mentions are removed for now, we don't need is_mention_open check
           
           if (!e.shiftKey) {
-            e.preventDefault(); // Only prevent default if we're sending (no shift)
+            e.preventDefault(); 
             if (me.press_enter === 1) {
               return;
             }
@@ -1564,11 +1554,9 @@ export default class ChatSpace {
   }
 
   toggle_voice_clip_icon() {
-    const type_message_input = this.$chat_actions.find(".type-message");
-    if (
-      type_message_input.find(".ql-editor").find("p").text() != "" ||
-      type_message_input.find(".ql-editor").find("p").find("img").length > 0
-    ) {
+    const $input = this.$chat_actions.find(".type-message");
+    const val = $input.val() ? $input.val().trim() : "";
+    if (val !== "") {
       this.$chat_actions.find(".message-send-button").css("display", "flex");
     } else {
       this.$chat_actions.find(".message-send-button").css("display", "none");
@@ -1768,15 +1756,13 @@ export default class ChatSpace {
     let $sanitized_content = __($("<div>").html(parseMessageTwemoji(content)));
     const $message_content = $(document.createElement("div")).addClass("cc-message-content");
     
-    if (type === "sender-message") {
-      // Use Frappe's native avatar generator (handles initials/images and avoids 404s)
+    if (type === "recipient-message") {
       const $avatar_container = $(document.createElement("div"))
         .addClass("cc-message-avatar")
         .attr("title", sender)
         .html(frappe.get_avatar("avatar-small", sender));
       
-      $message_content.append($avatar_container);
-      $message_content.append($name_element);
+      $recipient_element.prepend($avatar_container);
     }
 
     const content_has_inline_reply =
@@ -2068,22 +2054,23 @@ export default class ChatSpace {
       this.$chat_space_container.find(".mention-message:last").remove();
     }
 
-    if (
-      this.$chat_space.find(".ql-editor").find("p").text().trim().length == 0 &&
-      !attachment &&
-      this.$chat_space.find(".ql-editor").find("img").length == 0
-    ) {
+    const $input = this.$chat_actions.find(".type-message");
+    let content = $input.val() ? $input.val().trim() : "";
+
+    if (content.length === 0 && !attachment) {
       return;
     }
 
-    let content = this.$chat_space.find(".ql-editor").html();
+    // Convert newlines to <br> for HTML storage/rendering
+    content = content.replace(/\n/g, "<br>");
     (this.is_link = null),
       (this.is_media = null),
       (this.is_document = null),
       (this.is_voice_clip = null);
     let chat_room;
     let is_screenshot = 0;
-    if (this.$chat_space.find(".ql-editor").find("p").find("img").length > 0) {
+    // Image/Screenshot logic simplified for textarea
+    if (false) { 
       is_screenshot = 1;
     }
 
@@ -2202,7 +2189,7 @@ export default class ChatSpace {
     if (this.type_message_input) {
       this.type_message_input.clear();
     } else {
-      this.$chat_actions.find(".ql-editor").html("");
+      this.$chat_actions.find(".type-message").val("");
     }
     this.voice_clip.$voice_clip.css("display", "none");
     this.$chat_actions.find(".message-send-button").css("display", "none");
@@ -2540,7 +2527,7 @@ export default class ChatSpace {
     if (this.type_message_input) {
       this.type_message_input.clear();
     } else {
-      this.$chat_actions.find(".ql-editor").html("");
+      this.$chat_actions.find(".type-message").val("");
     }
     this.voice_clip.$voice_clip.css("display", "none");
     this.$chat_actions.find(".message-send-button").css("display", "none");
@@ -3554,7 +3541,7 @@ showTemplateSuggestions(res) {
     return;
   }
 
-  const editor = chatWindow.find(".type-message .ql-editor");
+  const editor = chatWindow.find(".type-message");
 
 
   chatWindow.find("#template-suggestions").remove();
@@ -3689,7 +3676,7 @@ showTemplateSuggestions(res) {
   }, 10);
 }
 insertTemplateText (text) {
-  const editor = me.$chat_actions.find(".ql-editor");
+  const editor = me.$chat_actions.find(".type-message");
   if (editor && editor.length > 0) {
     editor.text(text);
   }

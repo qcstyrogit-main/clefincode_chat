@@ -1318,7 +1318,70 @@ def get_reactions_for_message(message_name):
         return []
 
 @frappe.whitelist()
+def delete_chat_message(message_name, user_email, room):
+
+    sender_email = frappe.db.get_value("ClefinCode Chat Message", message_name, "sender_email")
+    if sender_email == user_email:
+        frappe.delete_doc("ClefinCode Chat Message", message_name)
+        channel_doc = frappe.get_doc("ClefinCode Chat Channel", room)
+        for member in channel_doc.members:
+            if member.is_removed == 0 and member.platform == "Chat":
+                frappe.publish_realtime(
+                    event="delete_chat_message",
+                    message={"message_name": message_name, "room": room},
+                    user=member.user
+                )
+        return {"results": "success"}
+    return {"results": "error", "message": _("Not authorized to delete this message")}
+
+@frappe.whitelist()
+def toggle_pin_chat_message(message_name, is_pinned, room):
+    is_pinned = 1 if str(is_pinned).lower() in ["1", "true"] else 0
+    frappe.db.set_value("ClefinCode Chat Message", message_name, "is_pinned", is_pinned)
+    channel_doc = frappe.get_doc("ClefinCode Chat Channel", room)
+
+    for member in channel_doc.members:
+        if member.is_removed == 0 and member.platform == "Chat":
+            frappe.publish_realtime(
+                event="toggle_pin_chat_message",
+                message={"message_name": message_name, "is_pinned": is_pinned, "room": room},
+                user=member.user
+            )
+    return {"results": "success"}
+
+@frappe.whitelist()
+def edit_chat_message(message_name, new_content, user_email, room):
+    sender_email = frappe.db.get_value("ClefinCode Chat Message", message_name, "sender_email")
+    if sender_email == user_email:
+        # Store original content if it's the first edit
+        msg_doc = frappe.get_doc("ClefinCode Chat Message", message_name)
+        if not msg_doc.original_content:
+            msg_doc.original_content = msg_doc.content
+        
+        msg_doc.content = new_content
+        msg_doc.is_edited = 1
+        msg_doc.save(ignore_permissions=True)
+
+        channel_doc = frappe.get_doc("ClefinCode Chat Channel", room)
+        for member in channel_doc.members:
+            if member.is_removed == 0 and member.platform == "Chat":
+                frappe.publish_realtime(
+                    event="edit_chat_message",
+                    message={
+                        "message_name": message_name, 
+                        "content": new_content, 
+                        "original_content": msg_doc.original_content,
+                        "room": room
+                    },
+                    user=member.user
+                )
+        return {"results": "success"}
+    return {"results": "error", "message": _("Not authorized to edit this message")}
+
+
+@frappe.whitelist()
 def toggle_message_reaction(message_name=None, emoji=None, user_email=None, room=None):
+
     """Toggle a reaction on a message. Adds if not present, removes if already reacted."""
     if not message_name or not emoji:
         # Log this specifically so we can find it in the Frappe Error Log
@@ -2097,7 +2160,7 @@ def get_chat_media(channel , remove_date = None):
     results = frappe.db.sql(f"""
     SELECT content , send_date , sender_email , sender , name AS message_name , is_media , is_document , is_voice_clip , file_id  , message_type, message_template_type
     FROM `tabClefinCode Chat Message`
-    WHERE {condition} And is_media = 1
+    WHERE {condition} And is_media = 1 AND file_id IS NOT NULL AND file_id != ''
 
     ORDER BY send_date DESC 
     """ , as_dict = True)

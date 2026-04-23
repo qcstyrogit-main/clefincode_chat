@@ -2100,7 +2100,7 @@ def get_chat_media(channel , remove_date = None):
     results = frappe.db.sql(f"""
     SELECT content , send_date , sender_email , sender , name AS message_name , is_media , is_document , is_voice_clip , file_id  , message_type, message_template_type
     FROM `tabClefinCode Chat Message`
-    WHERE {condition} And is_media = 1
+    WHERE {condition} And is_media = 1 AND file_id IS NOT NULL AND file_id != ''
 
     ORDER BY send_date DESC 
     """ , as_dict = True)

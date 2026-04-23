@@ -32,7 +32,10 @@
   "whatsapp_message_id",
   "instagram_message_id",
   "messenger_message_id",
-  "reply_to"
+  "reply_to",
+  "is_pinned",
+  "is_edited",
+  "original_content"
  ],
  "fields": [
   {
@@ -181,12 +184,30 @@
    "fieldtype": "Link",
    "label": "Reply To",
    "options": "ClefinCode Chat Message"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_pinned",
+   "fieldtype": "Check",
+   "label": "Is Pinned"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_edited",
+   "fieldtype": "Check",
+   "label": "Is Edited"
+  },
+  {
+   "fieldname": "original_content",
+   "fieldtype": "Long Text",
+   "ignore_xss_filter": 1,
+   "label": "Original Content"
   }
  ],
  "in_create": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-13 13:26:27.013053",
+ "modified": "2026-04-23 13:36:27.013053",
  "modified_by": "Administrator",
  "module": "ClefinCode Chat",
  "name": "ClefinCode Chat Message",
@@ -200,12 +221,24 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Chat Administrator",
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
    "share": 1,
    "write": 1
   }
  ],
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
  "states": []
 }

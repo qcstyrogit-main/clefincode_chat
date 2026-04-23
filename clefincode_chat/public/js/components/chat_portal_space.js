@@ -108,7 +108,7 @@ export default class ChatPortalSpace {
       me.handle_send_message();
     });
 
-    this.$chatbot_action.find(".type-message").keyup(function (e) {
+    this.$chatbot_action.find(".cc-type-message-input").keyup(function (e) {
       if (e.which === 13) {
         e.preventDefault();
         if (!e.shiftKey) {
@@ -232,11 +232,11 @@ export default class ChatPortalSpace {
   } //END make_message
 
   async handle_send_message() {
-    if (this.$chatbot_space.find(".type-message").val().length == 0) {
+    if (this.$chatbot_space.find(".cc-type-message-input").val().length == 0) {
       return;
     }
 
-    let content = this.$chatbot_space.find(".type-message").val();
+    let content = this.$chatbot_space.find(".cc-type-message-input").val();
     this.is_link = null;
 
     this.$chatbot_container.append(
@@ -248,7 +248,7 @@ export default class ChatPortalSpace {
     );
     scroll_to_bottom(this.$chatbot_container);
 
-    this.$chatbot_action.find(".type-message").val("");
+    this.$chatbot_action.find(".cc-type-message-input").val("");
     // const text_content = content
 
     if (this.is_first_message == 1 && this.profile.is_verified == 0) {
