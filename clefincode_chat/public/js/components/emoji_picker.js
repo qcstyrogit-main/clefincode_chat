@@ -147,6 +147,92 @@ const SKIN_TONE_SUPPORT = new Set([
   "🦵","🦶","👂","🦻","👃","👶","🧒","👦","👧","🧑","👱","👨","🧔","👩","🧓","👴","👵"
 ]);
 
+const TWEMOJI_BASE = "https://cdn.jsdelivr.net/gh/twitter/twemoji@latest/assets/svg/";
+
+/**
+ * Returns a Twemoji SVG URL for a given emoji character.
+ */
+export function twemojiUrl(emoji) {
+  const codePoints = [];
+  for (const char of emoji) {
+    codePoints.push(char.codePointAt(0).toString(16));
+  }
+  // Remove variation selector-16 (fe0f) if it's not needed for the filename, 
+  // but Twemoji usually expects it for specific sequences.
+  let fileName = codePoints.join("-");
+  // Some standard cleaning for Twemoji filenames
+  if (fileName.indexOf("200d") === -1 && fileName.endsWith("-fe0f")) {
+    fileName = fileName.replace("-fe0f", "");
+  }
+  return `${TWEMOJI_BASE}${fileName}.svg`;
+}
+
+/**
+ * Returns an <img> tag for the emoji.
+ */
+export function renderEmoji(emoji, className = "cc-twemoji") {
+  return `<img class="${className}" src="${twemojiUrl(emoji)}" draggable="false" alt="${emoji}" />`;
+}
+
+/**
+ * Scans a string for all native emojis and replaces them with Twemoji SVGs.
+ */
+export function parseMessageTwemoji(html) {
+  if (!html) return html;
+  
+  // Robust regex for emojis
+  const emojiRegex = /((\ud83c[\udde6-\uddff]){2}|[\u2700-\u27bf]|(?:\ud83c[\udf00-\udfff]|\ud83d[\udc00-\udfff]|\ud83e[\udc00-\udfff])(?:[\ufe0f\u200d](?:\ud83c[\udf00-\udfff]|\ud83d[\udc00-\udfff]|\ud83e[\udc00-\udfff]))*|[\u2000-\u3fff])/g;
+
+  // Split by HTML tags and only replace emojis in text segments
+  // This prevents double-parsing emojis inside attributes (like <img alt="🇵🇭">)
+  const segments = html.split(/(<[^>]*>)/g);
+  
+  const parsedSegments = segments.map(segment => {
+    // If it's a tag, return as is
+    if (segment.startsWith("<") && segment.endsWith(">")) {
+      return segment;
+    }
+    // If it's text, parse emojis
+    return segment.replace(emojiRegex, (match) => {
+      if (match.length === 1 && match.charCodeAt(0) < 200) return match;
+      return renderEmoji(match);
+    });
+  });
+
+  return parsedSegments.join("");
+}
+
+// Map of emojis to list of keywords for search
+const EMOJI_KEYWORDS = {
+  // Smileys
+  "😀": "grinning face happy smile", "😃": "smiley happy smile", "😄": "smile happy", "😁": "grin happy smile",
+  "😆": "laughing happy", "😅": "sweat smile happy", "🤣": "rofl laughing", "😂": "joy laughing tears",
+  "🙂": "slightly smiling", "🙃": "upside down", "😉": "wink winking", "😊": "blush happy", "😇": "innocent halo",
+  "🥰": "smiling face hearts love", "😍": "heart eyes love", "🤩": "star struck star eyes", "😘": "kissing heart love",
+  "😛": "stuck out tongue", "😜": "wink tongue", "🤑": "money mouth", "🤔": "thinking", "🤐": "zipper mouth",
+  "🤨": "raised eyebrow", "😐": "neutral face", "😑": "expressionless", "😶": "no mouth", "😏": "smirk smirking",
+  "😒": "unamused bored", "🙄": "face with rolling eyes", "😬": "grimacing", "🤥": "lying face", "😌": "relieved",
+  "😔": "pensive sad", "😪": "sleepy", "🤤": "drooling", "😴": "sleeping", "😷": "mask", "🤒": "thermometer fever",
+  "🤕": "bandage", "🤢": "nauseated vomit", "🤮": "vomiting", "🤧": "sneezing", "🥵": "hot heat", "🥶": "cold ice",
+  "🥴": "woozy", "😵": "dizzy", "🤯": "exploding", "🤠": "cowboy", "🥳": "partying party", "😎": "glasses cool",
+  "🤓": "nerd", "🧐": "monocle", "😕": "confused", "😟": "worried", "🙁": "frown", "☹️": "frowning",
+  "😮": "open mouth surprise", "😯": "hushed", "😲": "astonished", "😳": "flushed", "🥺": "pleading begging",
+  "😦": "frowning open", "😧": "anguished", "😨": "fearful", "😰": "anxious", "😥": "sad relieved", "😢": "cry crying",
+  "😭": "loudly crying sad", "😱": "scream scared", "😖": "confounded", "😣": "persevering", "😞": "disappointed",
+  "😓": "sweat", "😩": "weary", "😫": "tired", "🥱": "yawning", "😤": "triumph steam", "😡": "pouty angry",
+  "😠": "angry", "🤬": "symbols mouth angry", "😈": "smiling devil", "👿": "angry devil", "💀": "skull",
+  "💩": "poop", "👎": "thumbs down", "👍": "thumbs up", "❤️": "heart love",
+  // Flags (Keywords added for search)
+  "🏳️": "white flag", "🏴": "black flag", "🏁": "checkered flag racing", "🏳️‍🌈": "rainbow pride flag",
+  "🇩🇿": "algeria flag", "🇦🇷": "argentina flag", "🇦🇺": "australia flag", "🇦🇹": "austria flag",
+  "🇧🇪": "belgium flag", "🇧🇷": "brazil flag", "🇨🇦": "canada flag", "🇨🇱": "chile flag", "🇨🇳": "china flag",
+  "🇪🇬": "egypt flag", "🇫🇷": "france flag french", "🇩🇪": "germany flag german", "🇮🇳": "india flag",
+  "🇮🇩": "indonesia flag", "🇮🇹": "italy flag italian", "🇯🇵": "japan flag japanese", "🇲🇽": "mexico flag",
+  "🇳🇱": "netherlands flag", "🇳🇿": "new zealand flag", "🇵🇰": "pakistan flag", "🇵🇭": "philippines flag",
+  "🇷🇺": "russia flag russian", "🇸🇦": "saudi arabia flag", "🇿🇦": "south africa flag", "🇪🇸": "spain flag spanish",
+  "🇹🇷": "turkey flag", "🇦🇪": "uae emirates flag", "🇬🇧": "uk united kingdom flag", "🇺🇸": "us usa united states flag"
+};
+
 const SEARCH_INDEX = [];
 
 // Build flat search index on first use
@@ -155,7 +241,8 @@ function buildSearchIndex() {
   EMOJI_CATEGORIES.forEach(cat => {
     if (cat.id === "recent") return;
     cat.emojis.forEach(emoji => {
-      SEARCH_INDEX.push({ emoji, category: cat.id, label: cat.label });
+      const keywords = EMOJI_KEYWORDS[emoji] || "";
+      SEARCH_INDEX.push({ emoji, category: cat.id, label: cat.label, keywords: keywords.toLowerCase() });
     });
   });
 }
@@ -188,6 +275,7 @@ export default class EmojiPicker {
     this.anchor = opts.anchor;
     this.mode = opts.mode || "input";
     this.on_select = opts.on_select || (() => {});
+    this.on_customize_save = opts.on_customize_save || null;
     this.chat_space = opts.chat_space;
     this.message_name = opts.message_name || null;
     this.active_category = "recent";
@@ -210,13 +298,16 @@ export default class EmojiPicker {
     const panel = $(`
       <div class="cc-emoji-picker" role="dialog" aria-label="Emoji Picker">
         <div class="cc-ep-search-wrap">
-          <span class="cc-ep-search-icon">🔍</span>
-          <input class="cc-ep-search" type="text" placeholder="Search emoji…" autocomplete="off" />
+          <div class="cc-ep-search-pill">
+            <span class="cc-ep-search-icon">🔍</span>
+            <input class="cc-ep-search" type="text" placeholder="Search emoji" autocomplete="off" />
+          </div>
         </div>
         <div class="cc-ep-body">
           <div class="cc-ep-content"></div>
         </div>
         <div class="cc-ep-nav"></div>
+        <div class="cc-ep-arrow"></div>
       </div>
     `);
 
@@ -231,47 +322,53 @@ export default class EmojiPicker {
     });
 
     $("body").append(panel);
-    this._show_category(this.active_category);
+    this._render_all();
 
     // Animate in
     requestAnimationFrame(() => panel.addClass("cc-ep-open"));
   }
 
-  // ── Render a category ────────────────────────────────────────────────────────
-  _show_category(categoryId) {
-    this.active_category = categoryId;
-    this.$panel.find(".cc-ep-nav-btn").removeClass("active");
-    this.$panel.find(`.cc-ep-nav-btn[data-cat="${categoryId}"]`).addClass("active");
-
+  _render_all() {
     const $content = this.$panel.find(".cc-ep-content");
     $content.empty();
 
-    let emojis;
-    if (categoryId === "recent") {
-      emojis = getRecentEmojis();
-      if (emojis.length === 0) {
-        $content.html(`<div class="cc-ep-empty">No recently used emojis yet.</div>`);
-        return;
+    EMOJI_CATEGORIES.forEach(cat => {
+      let emojis;
+      if (cat.id === "recent") {
+        emojis = getRecentEmojis();
+        if (emojis.length === 0) return; // Hide recent if empty
+      } else {
+        emojis = cat.emojis;
       }
-    } else {
-      const cat = EMOJI_CATEGORIES.find(c => c.id === categoryId);
-      emojis = cat ? cat.emojis : [];
-    }
 
-    const cat = EMOJI_CATEGORIES.find(c => c.id === categoryId);
-    if (cat) {
-      $content.append(`<div class="cc-ep-category-label">${cat.icon} ${cat.label}</div>`);
-    }
+      if (cat.id === "recent") {
+        $content.append(`
+          <div class="cc-ep-category-section" data-cat="recent">
+            <div class="cc-ep-category-header">
+              <span class="cc-ep-category-label">Your reactions</span>
+              <span class="cc-ep-customize">Customize</span>
+            </div>
+            <div class="cc-ep-grid recent-grid"></div>
+          </div>
+        `);
+      } else {
+        $content.append(`
+          <div class="cc-ep-category-section" data-cat="${cat.id}">
+            <div class="cc-ep-category-label">${cat.label}</div>
+            <div class="cc-ep-grid"></div>
+          </div>
+        `);
+      }
 
-    const $grid = $(`<div class="cc-ep-grid"></div>`);
-    this._render_emojis(emojis, $grid);
-    $content.append($grid);
+      const $grid = $content.find(`[data-cat="${cat.id}"] .cc-ep-grid`);
+      this._render_emojis(emojis, $grid);
+    });
   }
 
   _render_emojis(emojis, $container) {
     const me = this;
     emojis.forEach(emoji => {
-      const $cell = $(`<button class="cc-ep-cell" title="${emoji}">${emoji}</button>`);
+      const $cell = $(`<button class="cc-ep-cell" title="${emoji}">${renderEmoji(emoji)}</button>`);
       let pressTimer = null;
 
       // Long press → skin tone picker (desktop + mobile)
@@ -305,7 +402,7 @@ export default class EmojiPicker {
       const displayEmoji = tone.modifier
         ? (baseEmoji + tone.modifier)
         : baseEmoji;
-      const $btn = $(`<button class="cc-ep-cell cc-ep-skin-btn" title="${tone.label}">${displayEmoji}</button>`);
+      const $btn = $(`<button class="cc-ep-cell cc-ep-skin-btn" title="${tone.label}">${renderEmoji(displayEmoji)}</button>`);
       $btn.on("click", () => {
         this._select_emoji(displayEmoji);
         $popup.remove();
@@ -328,16 +425,16 @@ export default class EmojiPicker {
     $content.empty();
 
     if (!query.trim()) {
-      this._show_category(this.active_category);
+      this._render_all();
       return;
     }
 
     const q = query.toLowerCase();
-    // Match emojis whose category label contains the query, plus partial ID match
+    // Match against keywords, emoji char itself, or category label
     const results = SEARCH_INDEX.filter(item =>
-      item.label.toLowerCase().includes(q) ||
+      item.keywords.includes(q) ||
       item.emoji.includes(q) ||
-      item.category.includes(q)
+      item.label.toLowerCase().includes(q)
     ).slice(0, 80);
 
     if (results.length === 0) {
@@ -355,23 +452,7 @@ export default class EmojiPicker {
   _select_emoji(emoji) {
     saveRecentEmoji(emoji);
 
-    if (this.mode === "input") {
-      // Insert into Quill editor
-      if (this.chat_space && this.chat_space.type_message_input) {
-        const quill = this.chat_space.type_message_input.quill;
-        if (quill) {
-          const range = quill.getSelection(true);
-          quill.insertText(range ? range.index : quill.getLength(), emoji);
-          quill.setSelection((range ? range.index : quill.getLength()) + emoji.length);
-        } else {
-          // Fallback: append to .ql-editor
-          const $editor = this.chat_space.$chat_actions.find(".ql-editor");
-          const $p = $editor.find("p").last();
-          $p.append(emoji);
-        }
-        this.chat_space.toggle_voice_clip_icon && this.chat_space.toggle_voice_clip_icon();
-      }
-    } else if (this.mode === "reaction") {
+    if (this.mode === "reaction") {
       if (this.message_name && this.chat_space) {
         const profile = this.chat_space.profile;
         const room = profile.room_type === "Contributor"
@@ -397,33 +478,77 @@ export default class EmojiPicker {
   _position() {
     if (!this.anchor || !this.anchor.length) return;
 
-    const anchorOffset = this.anchor.offset();
-    const anchorH = this.anchor.outerHeight();
-    const panelH = 380; // approximate picker height
-    const panelW = 320;
+    const anchorRect = this.anchor[0].getBoundingClientRect();
+    const panelH = this.$panel.outerHeight() || 320;
+    const panelW = this.$panel.outerWidth() || 280;
     const windowH = $(window).height();
     const windowW = $(window).width();
 
-    let top = anchorOffset.top - panelH - 8;
-    let left = anchorOffset.left;
+    // Prefer showing ABOVE
+    let top = anchorRect.top - panelH - 10;
+    let left = anchorRect.left + (anchorRect.width / 2) - (panelW / 2);
+    let arrowAtTop = false;
 
-    // Flip down if not enough room above
-    if (top < 8) top = anchorOffset.top + anchorH + 8;
-    // Clamp right edge
-    if (left + panelW > windowW - 8) left = windowW - panelW - 8;
-    if (left < 8) left = 8;
+    // Flip down ONLY if no room at top and enough room below
+    if (top < 10 && (anchorRect.bottom + panelH + 10 < windowH)) {
+      top = anchorRect.bottom + 10;
+      arrowAtTop = true;
+    } else if (top < 10) {
+      // Force it to stay at the top edge if both sides are tight
+      top = 10;
+    }
 
-    this.$panel.css({ top, left });
+    // Clamp horizontally
+    if (left + panelW > windowW - 10) left = windowW - panelW - 10;
+    if (left < 10) left = 10;
+
+    this.$panel.css({ 
+      top: `${top}px`, 
+      left: `${left}px` 
+    });
+    
+    // Exact arrow positioning
+    const anchorCenterViewportX = anchorRect.left + (anchorRect.width / 2);
+    const arrowLeft = anchorCenterViewportX - left - 8;
+    
+    const $arrow = this.$panel.find(".cc-ep-arrow");
+    $arrow.css({
+      left: `${arrowLeft}px`,
+      top: arrowAtTop ? "-8px" : "auto",
+      bottom: arrowAtTop ? "auto" : "-8px",
+      transform: arrowAtTop ? "rotate(-135deg)" : "rotate(45deg)",
+      display: (arrowLeft < 10 || arrowLeft > panelW - 10) ? "none" : "block"
+    });
   }
 
   // ── Event bindings ───────────────────────────────────────────────────────────
   _bind_events() {
     const me = this;
 
-    // Category nav
+    // Category nav - scroll to section
     this.$panel.on("click", ".cc-ep-nav-btn", function() {
       const catId = $(this).data("cat");
-      me._show_category(catId);
+      const $section = me.$panel.find(`.cc-ep-category-section[data-cat="${catId}"]`);
+      if ($section.length) {
+        me.$panel.find(".cc-ep-body").animate({
+          scrollTop: $section.position().top + me.$panel.find(".cc-ep-body").scrollTop() - 10
+        }, 300);
+      }
+    });
+
+    // Update active nav on scroll
+    this.$panel.find(".cc-ep-body").on("scroll", function() {
+      const bodyTop = $(this).offset().top;
+      let activeCat = "smileys";
+      
+      me.$panel.find(".cc-ep-category-section").each(function() {
+        if ($(this).offset().top - bodyTop < 50) {
+          activeCat = $(this).data("cat");
+        }
+      });
+      
+      me.$panel.find(".cc-ep-nav-btn").removeClass("active");
+      me.$panel.find(`.cc-ep-nav-btn[data-cat="${activeCat}"]`).addClass("active");
     });
 
     // Search input
@@ -433,9 +558,15 @@ export default class EmojiPicker {
       me.search_debounce = setTimeout(() => me._search(val), 200);
     });
 
+    // Customize Reactions click
+    this.$panel.on("click", ".cc-ep-customize", (e) => {
+      e.stopPropagation();
+      this._show_customize_dialog();
+    });
+
     // Close on outside click
     this._close_handler = (e) => {
-      if (!$(e.target).closest(".cc-emoji-picker, .cc-ep-trigger, .open-full-emoji-picker").length) {
+      if (!$(e.target).closest(".cc-emoji-picker, .cc-ep-trigger, .open-full-emoji-picker, .cc-customize-dialog").length) {
         me.close();
       }
     };
@@ -443,8 +574,79 @@ export default class EmojiPicker {
 
     // Close on Escape
     $(document).on("keydown.emoji_picker", (e) => {
-      if (e.key === "Escape") me.close();
+      if (e.key === "Escape") {
+        me.close();
+        $(".cc-customize-dialog").remove();
+      }
     });
+  }
+
+  _show_customize_dialog() {
+    const me = this;
+    const current = JSON.parse(localStorage.getItem("cc_quick_reactions") || '["👍","❤️","😂","😮","😢","😡"]');
+    let selectedIdx = 0;
+
+    const $dialog = $(`
+      <div class="cc-customize-dialog" role="dialog">
+        <div class="cc-cd-header">
+          <span>Customize Reactions</span>
+          <button class="cc-cd-close">&times;</button>
+        </div>
+        <div class="cc-cd-body">
+          <div class="cc-cd-current-row">
+            ${current.map((emoji, i) => `<div class="cc-cd-slot ${i === 0 ? "active" : ""}" data-idx="${i}">${renderEmoji(emoji)}</div>`).join("")}
+          </div>
+          <p class="cc-cd-hint">Tap a reaction, then choose an emoji to replace it.</p>
+          <div class="cc-cd-picker-area">
+             <!-- Simplified picker inside dialog -->
+             <div class="cc-cd-grid"></div>
+          </div>
+        </div>
+        <div class="cc-cd-footer">
+          <button class="btn btn-secondary cc-cd-reset">Reset</button>
+          <button class="btn btn-primary cc-cd-save">Save</button>
+        </div>
+      </div>
+    `);
+
+    // Populate simplified grid (first few categories)
+    const $grid = $dialog.find(".cc-cd-grid");
+    EMOJI_CATEGORIES.forEach(cat => {
+      if (cat.id === "recent") return;
+      cat.emojis.slice(0, 48).forEach(emoji => {
+        const $cell = $(`<button class="cc-ep-cell">${renderEmoji(emoji)}</button>`);
+        $cell.on("click", () => {
+          current[selectedIdx] = emoji;
+          $dialog.find(`.cc-cd-slot[data-idx="${selectedIdx}"]`).html(renderEmoji(emoji));
+        });
+        $grid.append($cell);
+      });
+    });
+
+    $dialog.find(".cc-cd-slot").on("click", function() {
+      $dialog.find(".cc-cd-slot").removeClass("active");
+      $(this).addClass("active");
+      selectedIdx = $(this).data("idx");
+    });
+
+    $dialog.find(".cc-cd-reset").on("click", () => {
+      const defaults = ["👍","❤️","😂","😮","😢","😡"];
+      defaults.forEach((emoji, i) => {
+        current[i] = emoji;
+        $dialog.find(`.cc-cd-slot[data-idx="${i}"]`).html(renderEmoji(emoji));
+      });
+    });
+    $dialog.find(".cc-cd-save").on("click", () => {
+      localStorage.setItem("cc_quick_reactions", JSON.stringify(current));
+      $dialog.remove();
+      me.close();
+      frappe.show_alert({ message: "Reactions updated!", indicator: "green" });
+      if (me.on_customize_save) me.on_customize_save();
+    });
+
+    $dialog.find(".cc-cd-close").on("click", () => $dialog.remove());
+
+    $("body").append($dialog);
   }
 
   close() {

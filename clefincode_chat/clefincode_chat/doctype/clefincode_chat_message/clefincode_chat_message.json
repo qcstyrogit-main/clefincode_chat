@@ -31,7 +31,8 @@
   "is_screenshot",
   "whatsapp_message_id",
   "instagram_message_id",
-  "messenger_message_id"
+  "messenger_message_id",
+  "reply_to"
  ],
  "fields": [
   {
@@ -174,6 +175,12 @@
    "fieldname": "messenger_message_id",
    "fieldtype": "Data",
    "label": "Messenger Message Id"
+  },
+  {
+   "fieldname": "reply_to",
+   "fieldtype": "Link",
+   "label": "Reply To",
+   "options": "ClefinCode Chat Message"
   }
  ],
  "in_create": 1,

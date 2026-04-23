@@ -1,5 +1,6 @@
 import ChatSpace from "./erpnext_chat_space";
 import ChatWindow from "./erpnext_chat_window";
+import { parseMessageTwemoji } from "./emoji_picker";
 import {
   get_date_from_now,
   get_time,
@@ -139,7 +140,7 @@ export default class ChatRoom {
       }
       last_message +=
         "<span class='last-message'>" +
-        this.sanitize_last_message(last_message_text) +
+        parseMessageTwemoji(this.sanitize_last_message(last_message_text)) +
         "</span>";
     } else {
       if (message_type == "image") {

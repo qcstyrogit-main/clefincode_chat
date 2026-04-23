@@ -1344,8 +1344,13 @@ def get_reactions_for_message(message_name):
         return []
 # ==========================================================================================
 @frappe.whitelist()
-def toggle_message_reaction(message_name, emoji, user_email, room):
+def toggle_message_reaction(message_name=None, emoji=None, user_email=None, room=None):
     """Toggle a reaction on a message. Adds if not present, removes if already reacted."""
+    if not message_name or not emoji:
+        # Log this specifically so we can find it in the Frappe Error Log
+        error_msg = f"ClefinCode Chat: toggle_message_reaction called with MISSING DATA. Name: {message_name}, Emoji: {emoji}, User: {user_email}, Room: {room}"
+        frappe.log_error(error_msg, "ClefinCode Chat API Error")
+        return {"status": 0, "message": "Missing message name or emoji"}
     try:
         # Check if this user already reacted with this emoji
         existing = frappe.db.get_value(

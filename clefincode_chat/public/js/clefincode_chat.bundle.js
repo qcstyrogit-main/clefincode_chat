@@ -99,8 +99,8 @@ frappe.ErpnextChat = class {
       .addClass("chat_left_section")
       .hide();
 
-    this.$app_element.append(this.$chat_left_section);
     this.$app_element.append(this.$chat_right_section);
+    this.$app_element.append(this.$chat_left_section);
     this.$chat_bottom = $(document.createElement("div")).addClass(
       "chat_bottom"
     );

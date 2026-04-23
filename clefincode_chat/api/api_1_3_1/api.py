@@ -1008,7 +1008,7 @@ def get_all_sub_channels_for_contributor(parent_channel , user_email):
 ######################################## Messages ###########################################
 #############################################################################################
 @frappe.whitelist()
-def send(content, user, room , email, send_date = None , is_first_message = 0, attachment = None , sub_channel = None , is_link = None , is_media = None , is_document = None, is_voice_clip = None , file_id = None , message_type = "" , message_template_type= "", only_receive_by = None , id_message_local_from_app = None, chat_topic = None, is_screenshot = 0):
+def send(content, user, room , email, send_date = None , is_first_message = 0, attachment = None , sub_channel = None , is_link = None , is_media = None , is_document = None, is_voice_clip = None , file_id = None , message_type = "" , message_template_type= "", only_receive_by = None , id_message_local_from_app = None, chat_topic = None, is_screenshot = 0, reply_to = None):
     try:
        
         from packaging import version
@@ -1049,7 +1049,8 @@ def send(content, user, room , email, send_date = None , is_first_message = 0, a
                 "message_type" : message_type,
                 "message_template_type": message_template_type,
                 "only_receive_by" : only_receive_by,
-                "chat_topic": chat_topic
+                "chat_topic": chat_topic,
+                "reply_to": reply_to
             }
         ).insert(ignore_permissions=True)
         
@@ -1143,7 +1144,10 @@ def send(content, user, room , email, send_date = None , is_first_message = 0, a
             "message_template_type": message_template_type,
             "avatar_url": channel_doc.channel_image,
             "utc_message_date" : send_date,
-            "platform": platform 
+            "platform": platform,
+            "reply_to": reply_to,
+            "replied_message_sender": frappe.db.get_value("ClefinCode Chat Message", reply_to, "sender") if reply_to else None,
+            "replied_message_content": frappe.db.get_value("ClefinCode Chat Message", reply_to, "content") if reply_to else None
         }
         
 
@@ -1314,8 +1318,13 @@ def get_reactions_for_message(message_name):
         return []
 
 @frappe.whitelist()
-def toggle_message_reaction(message_name, emoji, user_email, room):
+def toggle_message_reaction(message_name=None, emoji=None, user_email=None, room=None):
     """Toggle a reaction on a message. Adds if not present, removes if already reacted."""
+    if not message_name or not emoji:
+        # Log this specifically so we can find it in the Frappe Error Log
+        error_msg = f"ClefinCode Chat: toggle_message_reaction called with MISSING DATA (v1.3.1). Name: {message_name}, Emoji: {emoji}, User: {user_email}, Room: {room}"
+        frappe.log_error(error_msg, "ClefinCode Chat API Error")
+        return {"status": 0, "message": "Missing message name or emoji"}
     try:
         existing = frappe.db.get_value(
             "ClefinCode Chat Message Reaction",
@@ -1382,14 +1391,14 @@ def get_messages(room , user_email , room_type , chat_topic = None, remove_date 
     
 
     results = frappe.db.sql(f"""
-    SELECT content , send_date , sender_email , sender , name AS message_name , is_media , is_document , is_voice_clip  , file_id  , message_type, message_template_type , only_receive_by
-    FROM `tabClefinCode Chat Message`
+    SELECT content , send_date , sender_email , sender , name AS message_name , is_media , is_document , is_voice_clip  , file_id  , message_type, message_template_type , only_receive_by, reply_to, (SELECT sender FROM `tabClefinCode Chat Message` WHERE name = m.reply_to) as replied_message_sender, (SELECT content FROM `tabClefinCode Chat Message` WHERE name = m.reply_to) as replied_message_content
+    FROM `tabClefinCode Chat Message` m
     WHERE {condition} AND (only_receive_by IS NULL OR only_receive_by = '')
 
     UNION
 
-    SELECT content , send_date , sender_email , sender , name AS message_name , is_media , is_document , is_voice_clip  , file_id  , message_type, message_template_type , only_receive_by
-    FROM `tabClefinCode Chat Message`
+    SELECT content , send_date , sender_email , sender , name AS message_name , is_media , is_document , is_voice_clip  , file_id  , message_type, message_template_type , only_receive_by, reply_to, (SELECT sender FROM `tabClefinCode Chat Message` WHERE name = m.reply_to) as replied_message_sender, (SELECT content FROM `tabClefinCode Chat Message` WHERE name = m.reply_to) as replied_message_content
+    FROM `tabClefinCode Chat Message` m
     WHERE {condition} AND only_receive_by = '{user_email}'
     
     ORDER BY send_date DESC 

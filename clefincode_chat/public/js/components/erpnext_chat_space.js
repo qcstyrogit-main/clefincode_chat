@@ -30,7 +30,7 @@ import ChatInfo from "./erpnext_chat_info";
 import VoiceClip from "./voice_clip_widget";
 import ChatWindow from "./erpnext_chat_window";
 import { add_group_member, create_group } from "./erpnext_chat_contact_list";
-import EmojiPicker from "./emoji_picker";
+import EmojiPicker, { renderEmoji, parseMessageTwemoji } from "./emoji_picker";
 
 
 export default class ChatSpace {
@@ -56,6 +56,7 @@ export default class ChatSpace {
     this.reference_doctypes = [];
     this.online_timeout = null;
     this.is_disk = "desk" in frappe;  
+    this.reply_to_message = null; 
 
     // open chat space for showing topic information
     this.chat_topic_space = opts.chat_topic;
@@ -121,12 +122,19 @@ export default class ChatSpace {
     }
     this.setup_chat_window();
     await this.setup_header();
+    this.get_chat_members();
+
+    // Initialize skeleton UI immediately
+    await this.setup_messages([]);
+    await this.setup_actions();
+    this.render();
+
     if (this.profile.user === "Guest") {
       this.setup_socketio();
     } else if (this.profile.room && this.new_group != 1) {
       await this.get_sub_channels_info();
     }
-    this.get_chat_members();
+
     if (this.chat_topic_space && this.is_private_topic == 1) {
       const res = await check_if_user_has_permission(
         this.profile.user_email,
@@ -360,12 +368,16 @@ export default class ChatSpace {
           this.messages_offset
         );
       }
-      await this.setup_messages(res.results);
-      await this.setup_actions();
+      await this.update_messages_list(res.results);
       this.render();
     } catch (error) {
       console.log(error);
     }
+  }
+
+  async update_messages_list(messages_list) {
+    await this.make_messages_html(messages_list);
+    this.$chat_space_container.html(this.message_html);
   }
 
   async create_empty_space() {
@@ -517,19 +529,20 @@ export default class ChatSpace {
 
         // Add Reopen button
         const $reopenBtn = $(
-          `<button class="btn btn-primary">Reopen</button>`
+          `<button class="btn btn-primary cc-reopen-btn">Reopen</button>`
         ).css({ marginRight: "10px" });
 
         // Add Create New button
         const $createNewBtn = $(
-          `<button class="btn btn-secondary">Create New</button>`
+          `<button class="btn btn-secondary cc-create-new-btn">Create New</button>`
         );
 
-        
         // Append buttons inside a wrapper
-        const $btnWrapper = $("<div>")
-          .css({ display: "flex", justifyContent: "center", gap: "10px" })
-
+        const $btnWrapper = $("<div>").css({
+          display: "flex",
+          justifyContent: "center",
+          gap: "10px",
+        });
 
         if (this.profile.is_removed != 1) {
           // Add info message
@@ -542,46 +555,7 @@ export default class ChatSpace {
           }
           this.$chat_actions.append($btnWrapper);
           this.$chat_space.append(this.$chat_actions);
-
-                  const room = this.profile.room;
-
-        // Set up button events
-        $reopenBtn.on("click", () => {
-          frappe.call({
-            method: "clefincode_chat.api.api_1_2_1.api.trigger_chat_channel_status",
-            args: { room: room,
-                    is_open: false
-                  },
-            callback: async (r) => {
-              if (!r.exc) {
-                // 1) Flip your local state so you’re no longer “removed / closed”
-                this.profile.is_removed = 0;
-                this.chat_status = 'Open';
-
-                // 2) Remove the “closed” UI you injected
-                this.$chat_actions.remove();
-                this.$chat_space.find('.no-messages-info').remove();
-
-                // 3) Reset any “previous message” memory so the date-line will render
-                this.prevMessage = {};
-
-                // 4) Reload the last N messages and scroll to bottom
-                this.messages_offset = 0;
-                this.messages_limit = 10;
-
-                await this.fetch_and_setup_messages();
-              }
-            }
-          });
-        });
-
-        $createNewBtn.on("click", () => {
-          const contact = this.profile.contact;
-          const contact_name = this.profile.room_name;
-          const platform = this.profile.platform;
-          this.open_chat_space(contact, contact_name, platform);
-        });
-
+        }
         return;
       }
     }
@@ -600,7 +574,6 @@ export default class ChatSpace {
         this.setup_events();
         return;
       }
-    }
 
     this.$chat_actions = $(document.createElement("div")).addClass(
       "chat-space-actions"
@@ -608,25 +581,49 @@ export default class ChatSpace {
     this.type_message_input = new TypeMessageInput({ chat_space: this });
     this.voice_clip = new VoiceClip({ chat_space: this });
 
-    const file_attachment = `<span class='open-attach-items'>
-  ${frappe.utils.icon("attachment", "lg")}
-  </span>
-  <input type='file' id='chat-file-uploader' 
-    accept='image/*, application/pdf, .doc, .docx'
-    style='display: none;'>`;
+    const file_attachment = `
+      <div class="cc-attach-wrap">
+        <span class='open-attach-items' title='More actions'>
+          <span class="open-attach-plus">+</span>
+        </span>
+        <div class="cc-attach-menu">
+          <button type="button" class="cc-attach-action" data-action="voice">
+            <i class="fa fa-microphone"></i>
+            <span>Send a voice clip</span>
+          </button>
+          <button type="button" class="cc-attach-action" data-action="file">
+            <i class="fa fa-paperclip"></i>
+            <span>Attach a file up to 100 MB</span>
+          </button>
+        </div>
+      </div>
+      <input type='file' id='chat-file-uploader' style='display: none;'>`;
 
     const chat_actions_html = `
+      <div class="cc-reply-preview-container">
+        <div class="cc-reply-preview-content">
+          <div class="cc-reply-user"></div>
+          <div class="cc-reply-text"></div>
+        </div>
+        <div class="cc-reply-close"><i class="fa fa-times"></i></div>
+      </div>
       <div class="message-section">
-          ${this.profile.room_type != "Guest" ? file_attachment : ``}
-          ${this.type_message_input.wrapper}
-          <span class='cc-ep-trigger' title='Emoji'>
-              😊
-          </span>
-          <span class='message-send-button' style="display:none">
-              <svg xmlns="http://www.w3.org/2000/svg" width="1.1rem" height="1.1rem" viewBox="0 0 24 24">
-                  <path d="M24 0l-6 22-8.129-7.239 7.802-8.234-10.458 7.227-7.215-1.754 24-12zm-15 16.668v7.332l3.258-4.431-3.258-2.901z"/>
-              </svg>
-          </span>
+          <div class="cc-composer-shell">
+            <div class="cc-input-pill">
+              ${this.type_message_input.wrapper}
+            </div>
+            <div class="cc-composer-actions">
+              ${this.profile.room_type != "Guest" ? file_attachment : ``}
+              <div class="cc-action-group">
+                <span class='cc-ep-trigger' title='Emoji'>
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="#65676b"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-3.5-9c.828 0 1.5-.672 1.5-1.5S9.328 8 8.5 8 7 8.672 7 9.5s.672 1.5 1.5 1.5zm7 0c.828 0 1.5-.672 1.5-1.5S16.328 8 15.5 8 14 8.672 14 9.5s.672 1.5 1.5 1.5zm-3.5 6.5c2.33 0 4.314-1.548 4.903-3.67.114-.41-.128-.83-.538-.943-.41-.114-.83.128-.943.538-.415 1.503-1.802 2.575-3.422 2.575s-3.007-1.072-3.422-2.575c-.114-.41-.533-.652-.943-.538-.41.114-.652.533-.538.943.589 2.122 2.573 3.67 4.903 3.67z"></path></svg>
+                </span>
+                <span class='message-send-button' style="display:none">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="white"><path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"></path></svg>
+                </span>
+              </div>
+            </div>
+          </div>
       </div>
       <div class="voice-section">
       </div>
@@ -634,9 +631,6 @@ export default class ChatSpace {
     this.$chat_actions.html(chat_actions_html);
 
     if (this.profile.room_type != "Guest") {
-      this.$chat_actions
-        .find(".message-section")
-        .append(this.voice_clip.$voice_clip);
       this.$chat_actions
         .find(".voice-section")
         .append(this.voice_clip.$voice_message);
@@ -649,6 +643,109 @@ export default class ChatSpace {
 
   setup_events() {
     const me = this;
+
+    const scroll_to_message = function (message_name) {
+      const $target_msg = me.$chat_space.find(
+        `.cc-message-wrapper[data-message-name="${message_name}"]`
+      );
+      if (!$target_msg.length) return;
+
+      me.$chat_space_container.animate(
+        {
+          scrollTop:
+            me.$chat_space_container.scrollTop() +
+            $target_msg.position().top -
+            100,
+        },
+        500
+      );
+
+      $target_msg.find(".message-bubble").addClass("cc-flash-highlight");
+      setTimeout(() => {
+        $target_msg.find(".message-bubble").removeClass("cc-flash-highlight");
+      }, 2000);
+    };
+
+    // --- REPLY EVENTS ---
+    this.$chat_space.on("click", ".cc-reply-trigger", function(e) {
+      const $wrapper = $(this).closest(".cc-message-wrapper");
+      const message_name = $wrapper.data("message-name");
+      const sender_name = $wrapper.hasClass("recipient-message")
+        ? "You"
+        : $wrapper.find(".message-name").text() || "User";
+      const $bubble_clone = $wrapper.find(".message-bubble").clone();
+      $bubble_clone.find(".cc-replied-message").remove();
+      const content = $bubble_clone.text().replace(/\s+/g, " ").trim();
+
+      me.reply_to_message = {
+        message_name: message_name,
+        sender_name: sender_name,
+        content: content
+      };
+
+      const $preview = me.$chat_actions.find(".cc-reply-preview-container");
+      $preview.find(".cc-reply-user").text(`Replying to ${sender_name}`);
+      $preview.find(".cc-reply-text").text(content);
+      $preview.addClass("visible");
+
+      // Focus the input
+      me.$chat_actions.find(".ql-editor").focus();
+    });
+
+    this.$chat_space.on(
+      "click",
+      ".cc-replied-message, .cc-inline-reply-quote",
+      function (e) {
+        const target = $(this).data("target");
+        if (!target) return;
+        e.preventDefault();
+        e.stopPropagation();
+        scroll_to_message(target);
+      }
+    );
+
+    this.$chat_space.on("click", ".cc-reply-close", function() {
+      me.reply_to_message = null;
+      me.$chat_actions.find(".cc-reply-preview-container").removeClass("visible");
+    });
+
+    this.$chat_space.on("click", ".cc-reply-preview-container", function(e) {
+      if ($(e.target).closest(".cc-reply-close").length) return;
+      if (!me.reply_to_message || !me.reply_to_message.message_name) return;
+      scroll_to_message(me.reply_to_message.message_name);
+    });
+
+
+    // --- REOPEN & CREATE NEW (DELEGATED) ---
+    this.$chat_space.on("click", ".cc-reopen-btn", (e) => {
+      e.preventDefault();
+      const room = me.profile.room;
+      frappe.call({
+        method: "clefincode_chat.api.api_1_2_1.api.trigger_chat_channel_status",
+        args: { room: room, is_open: false },
+        callback: async (r) => {
+          if (!r.exc) {
+            me.profile.is_removed = 0;
+            me.chat_status = "Open";
+            me.$chat_actions.remove();
+            me.$chat_space.find(".no-messages-info").remove();
+            me.prevMessage = {};
+            me.messages_offset = 0;
+            await me.setup_actions();
+            await me.fetch_and_setup_messages();
+            me.render();
+          }
+        },
+      });
+    });
+
+    this.$chat_space.on("click", ".cc-create-new-btn", (e) => {
+      e.preventDefault();
+      const contact = me.profile.contact;
+      const contact_name = me.profile.room_name;
+      const platform = me.profile.platform;
+      me.open_chat_space(contact, contact_name, platform);
+    });
 
     // --- REACTION EVENTS (DELEGATED) ---
     // 1. Quick reaction click
@@ -664,7 +761,7 @@ export default class ChatSpace {
     });
 
     // 2. Open full picker for reactions
-    this.$chat_space.on("click", ".cc-open-full-picker", function(e) {
+    this.$chat_space.on("click", ".open-full-emoji-picker", function(e) {
       const message_name = $(this).closest(".cc-message-wrapper").data("message-name");
       new EmojiPicker({
         anchor: $(this),
@@ -674,16 +771,242 @@ export default class ChatSpace {
       });
     });
 
-    // 3. Click reaction badge to toggle
+    // --- Global Reaction Palette Setup (Messenger style: float on top of everything) ---
+    this.render_global_palette = () => {
+      const reactions = JSON.parse(localStorage.getItem("cc_quick_reactions") || '["👍","❤️","😂","😮","😢","😡"]');
+      let html = `
+        <div class="cc-global-reaction-palette">
+          <div class="cc-message-actions">
+            ${reactions.map(emoji => `<span class="cc-quick-react" data-emoji="${emoji}">${renderEmoji(emoji)}</span>`).join("")}
+            <button class="cc-ep-trigger open-full-emoji-picker" title="More emojis"><i class="fa fa-plus"></i></button>
+          </div>
+        </div>`;
+      
+      if ($("body > .cc-global-reaction-palette").length) {
+        $("body > .cc-global-reaction-palette").replaceWith($(html).appendTo("body"));
+      } else {
+        $(html).appendTo("body");
+      }
+      this.$global_palette = $("body > .cc-global-reaction-palette");
+    };
+
+    if (!$("body > .cc-global-reaction-palette").length) {
+      this.render_global_palette();
+
+      // Hide when clicking outside
+      $(document).on("mousedown.cc_palette", (e) => {
+        if (!$(e.target).closest(".cc-reaction-trigger, .cc-global-reaction-palette, .cc-customize-dialog, .cc-emoji-picker").length) {
+          $(".cc-global-reaction-palette").removeClass("active");
+        }
+      });
+    } else {
+      this.$global_palette = $("body > .cc-global-reaction-palette");
+    }
+
+    // --- Scroll to Bottom Button Setup ---
+    if (!this.$chat_space.find(".cc-scroll-bottom").length) {
+      this.$scroll_bottom = $(`
+        <div class="cc-scroll-bottom" title="Scroll to latest message">
+          <span class="cc-sb-arrow">↓</span>
+        </div>
+      `).appendTo(this.$chat_space);
+
+      this.$scroll_bottom.on("click", function() {
+        const container = me.$chat_space_container[0];
+        if (container) {
+          me.$chat_space_container.animate({
+            scrollTop: container.scrollHeight
+          }, 400);
+        }
+      });
+    }
+
+    // Capture all scroll events in the chat space
+    const updateScrollBtn = () => {
+      const container = me.$chat_space_container ? me.$chat_space_container[0] : null;
+      if (!container) return;
+      
+      const isAtBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 100;
+      const $btn = me.$chat_space.find(".cc-scroll-bottom");
+      
+      if (isAtBottom) {
+        $btn.removeClass("visible");
+      } else {
+        $btn.addClass("visible");
+      }
+    };
+
+    // Use capturing listener to catch scroll even if container is replaced
+    window.addEventListener("scroll", (e) => {
+      if (e.target.classList && e.target.classList.contains("chat-space-container")) {
+        updateScrollBtn();
+        
+        // Hide reaction palette and emoji picker on scroll to prevent detached popups
+        $("body > .cc-global-reaction-palette").removeClass("active");
+        $(".cc-emoji-picker").removeClass("cc-ep-open");
+        setTimeout(() => $(".cc-emoji-picker").remove(), 200);
+      }
+    }, true);
+
+    // Also check on image loads (common cause of height shifts)
+    this.$chat_space.on("load", "img", updateScrollBtn);
+
+    // Scroll to latest message click handler
+    this.$chat_space.on("click", ".cc-scroll-bottom", function() {
+      if (me.$chat_space_container && me.$chat_space_container.length) {
+        me.$chat_space_container.animate({
+          scrollTop: me.$chat_space_container[0].scrollHeight
+        }, 400); // Smooth scroll to bottom
+      }
+    });
+
+    // (Removed broken delegated scroll listener as scroll events don't bubble)
+
+    // 3. Click reaction trigger to show global palette
+    this.$chat_space.on("click", ".cc-reaction-trigger", function(e) {
+      e.stopPropagation();
+      const $btn = $(this);
+      const $palette = $("body > .cc-global-reaction-palette");
+      
+      console.group("ClefinCode Reaction Trace: [Trigger Click]");
+      
+      // Try to get message name with multiple fallbacks
+      let message_name = $btn.data("message") || $btn.attr("data-message");
+      if (!message_name || message_name === "undefined") {
+        const $wrapper = $btn.closest(".cc-message-wrapper");
+        message_name = $wrapper.data("message-name") || $wrapper.attr("data-message-name");
+        console.log("- Fallback to wrapper ID:", message_name);
+      }
+
+      console.log("- Captured Message ID:", message_name);
+
+      if (!message_name || message_name === "undefined") {
+        console.error("- [FAILED] Trigger clicked but no valid message name found.");
+        console.groupEnd();
+        return;
+      }
+
+      const $wrapper = $btn.closest(".cc-message-wrapper");
+      
+      // Position the palette relative to the document (Absolute body positioning)
+      $palette.addClass("active"); 
+      const palette_width = $palette.outerWidth() || 320;
+      const $bubble = $btn.closest(".cc-message-wrapper").find(".message-bubble").first();
+      
+      if (!$bubble.length) {
+        console.error("- [FAILED] Bubble not found for palette positioning.");
+        return;
+      }
+
+      // Explicit document-relative coordinates using TRIGGER BUTTON (the smiley) as anchor
+      const btn_rect = $btn[0].getBoundingClientRect();
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+      
+      // Position it exactly above the button
+      let top = btn_rect.top + scrollTop - 55; // 55px above the button top
+      let left = (btn_rect.left + btn_rect.right) / 2 + scrollLeft - (palette_width / 2);
+
+      // Clamp horizontally within window boundaries
+      const win_width = $(window).width();
+      if (left < 10) left = 10;
+      if (left + palette_width > win_width - 10) left = win_width - palette_width - 10;
+
+      console.warn("- Reaction Palette Anchor Check (Button Mode):", { top, left, btn_rect, scrollTop });
+
+      $palette.css({
+        position: "absolute",
+        top: `${top}px`,
+        left: `${left}px`,
+        zIndex: 200000 
+      }).attr("data-active-message", message_name)
+        .data("trigger-btn", $btn); // Store the original smiley button
+      
+      console.log("- Palette activated for ID:", message_name);
+      console.groupEnd();
+    });
+
+    // 4. Click reaction badge to toggle
     this.$chat_space.on("click", ".cc-reaction-badge", function(e) {
       const emoji = $(this).data("emoji");
-      const message_name = $(this).closest(".cc-reaction-bar").data("message");
+      const $bar = $(this).closest(".cc-reaction-bar");
+      const message_name = $bar.data("message") || $bar.attr("data-message");
+      
+      console.group("ClefinCode Reaction Trace: [Badge Toggle]");
+      console.log("- Emoji:", emoji);
+      console.log("- Message ID:", message_name);
+
       const room = me.profile.room_type === "Contributor" ? me.profile.parent_channel : me.profile.room;
+
+      if (!message_name || message_name === "undefined" || !emoji) {
+        console.error("- [ABORTED] Missing ID or Emoji.");
+        console.groupEnd();
+        return;
+      }
 
       frappe.call({
         method: "clefincode_chat.api.api_1_2_1.api.toggle_message_reaction",
         args: { message_name, emoji, user_email: me.profile.user_email, room }
       });
+      console.groupEnd();
+    });
+
+    // 5. Global Palette Selection (Quick Reacts)
+    $(document).off("click.cc_react").on("click.cc_react", ".cc-global-reaction-palette .cc-quick-react", function(e) {
+      e.stopPropagation();
+      const $palette = $("body > .cc-global-reaction-palette");
+      if (!$palette.hasClass("active")) return;
+
+      const emoji = $(this).data("emoji") || $(this).attr("data-emoji");
+      const message_name = $palette.attr("data-active-message");
+      
+      console.group("ClefinCode Reaction Trace: [Quick Palette Selection]");
+      if (emoji && message_name && message_name !== "undefined") {
+        const room = me.profile.room_type === "Contributor" ? me.profile.parent_channel : me.profile.room;
+        frappe.call({
+          method: "clefincode_chat.api.api_1_2_1.api.toggle_message_reaction",
+          args: { message_name, emoji, user_email: me.profile.user_email, room }
+        });
+      }
+      $palette.removeClass("active");
+      console.groupEnd();
+    });
+
+    // 5b. Global Palette Selection (More Emojis)
+    $(document).off("click.cc_more").on("click.cc_more", ".cc-global-reaction-palette .open-full-emoji-picker", function(e) {
+      e.stopPropagation();
+      const $palette = $("body > .cc-global-reaction-palette");
+      const message_name = $palette.attr("data-active-message");
+      const $original_btn = $palette.data("trigger-btn"); // Get original smiley button
+      
+      if (!message_name || message_name === "undefined") return;
+
+      // Hide the quick palette first
+      $palette.removeClass("active");
+
+      new EmojiPicker({
+        anchor: $original_btn || $(this),
+        mode: "reaction",
+        message_name: message_name,
+        chat_space: me,
+        on_select: (emoji) => {
+          $palette.removeClass("active");
+          me.$chat_space_container.css("overflow", "");
+        },
+        on_customize_save: () => {
+          me.render_global_palette();
+        }
+      });
+    });
+
+    $(document).on("click.cc_reaction_close", function(e) {
+      const $palette = me.$chat_space ? me.$chat_space.find(".cc-global-reaction-palette") : null;
+      if ($palette && $palette.hasClass("active")) {
+        if (!$(e.target).closest(".cc-global-reaction-palette").length && !$(e.target).closest(".cc-reaction-trigger").length) {
+          $palette.removeClass("active");
+          me.$chat_space_container.css("overflow", "");
+        }
+      }
     });
 
     this.$chat_space.find(".cc-ep-trigger").on("click", function () {
@@ -691,6 +1014,9 @@ export default class ChatSpace {
         anchor: $(this),
         mode: "input",
         chat_space: me,
+        on_select: (emoji) => {
+          me.type_message_input.insert_emoji(emoji);
+        }
       });
     });
 
@@ -823,21 +1149,34 @@ export default class ChatSpace {
     });
 
     if (this.$chat_actions && this.$chat_actions.length > 0) {
-      this.$chat_actions.find(".open-attach-items").on("click", function () {
-        if(!me.is_disk){
-          me.$chat_actions.find('#chat-file-uploader').click();
-        }else{
-          new frappe.ui.FileUploader({
-            allow_multiple: false,
-            async on_success(file) {
-              await me.handle_send_message(
-                file.file_url,
-                file.file_name,
-                file.name
-              );
-            },
-          });
-        }        
+      this.$chat_actions.find(".open-attach-items").on("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        me.$chat_actions.find(".cc-attach-menu").toggleClass("visible");
+      });
+
+      this.$chat_actions.find(".cc-attach-menu").on("click", function (e) {
+        e.stopPropagation();
+      });
+
+      this.$chat_space.off("click.cc_attach_menu").on("click.cc_attach_menu", function () {
+        me.$chat_actions.find(".cc-attach-menu").removeClass("visible");
+      });
+
+      this.$chat_actions.find(".cc-attach-action[data-action='voice']").on("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        me.$chat_actions.find(".cc-attach-menu").removeClass("visible");
+        if (me.voice_clip && me.voice_clip.$voice_clip) {
+          me.voice_clip.$voice_clip.trigger("click");
+        }
+      });
+
+      this.$chat_actions.find(".cc-attach-action[data-action='file']").on("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        me.$chat_actions.find(".cc-attach-menu").removeClass("visible");
+        me.$chat_actions.find("#chat-file-uploader").click();
       });
 
       this.$chat_actions.find('#chat-file-uploader').on('change', function () {
@@ -866,6 +1205,9 @@ export default class ChatSpace {
       });
 
       this.$chat_actions.find(".type-message").on("input", function () {
+        if (me.type_message_input) {
+          me.type_message_input.sync_height();
+        }
         if (me.profile.room) {
           // Only call setupTypingIndicator if it's not already active
           if (!me.isTypingIndicatorActive) {
@@ -905,30 +1247,38 @@ export default class ChatSpace {
         }
       });
 
-      this.$chat_actions.find(".type-message").on("keyup", function (e) {
+      this.$chat_actions.find(".cc-input-pill").on("click", function () {
+        me.type_message_input.quill.focus();
+      });
+
+      this.$chat_actions.find(".type-message").on("keydown", function (e) {
         me.toggle_voice_clip_icon();
 
-        const ql_mention_list_container = me.type_message_input.quill.is_open;
-        if (e.which === 13) {
-          e.preventDefault();
-          if (ql_mention_list_container == 1) {
-            return;
-          } else {
-            if (!e.shiftKey) {
-              if (me.press_enter === 1) {
-                return;
-              }
-              me.press_enter = 1;
+        if (!me.type_message_input || !me.type_message_input.quill) return;
 
-              me.handle_send_message()
-                .then(() => {
-                  me.press_enter = 0;
-                })
-                .catch((error) => {
-                  console.error("An error occurred:", error);
-                  me.press_enter = 0;
-                });
+        const mention_module = me.type_message_input.quill.getModule('mention');
+        const is_mention_open = mention_module ? mention_module.isOpen : false;
+
+        if (e.which === 13) {
+          if (is_mention_open) {
+            return;
+          }
+          
+          if (!e.shiftKey) {
+            e.preventDefault(); // Only prevent default if we're sending (no shift)
+            if (me.press_enter === 1) {
+              return;
             }
+            me.press_enter = 1;
+
+            me.handle_send_message()
+              .then(() => {
+                me.press_enter = 0;
+              })
+              .catch((error) => {
+                console.error("An error occurred:", error);
+                me.press_enter = 0;
+              });
           }
         }
       });
@@ -953,6 +1303,11 @@ export default class ChatSpace {
   } //End setup_events
 
   async handle_upload_file(file) {
+    const max_upload_size = 100 * 1024 * 1024;
+    if (file.file_obj && file.file_obj.size > max_upload_size) {
+      frappe.msgprint(__("Please choose a file up to 100 MB."));
+      return;
+    }
     const dataurl = await frappe.dom.file_to_base64(file.file_obj);
     file.dataurl = dataurl;
     file.name = file.file_obj.name;
@@ -1214,10 +1569,8 @@ export default class ChatSpace {
       type_message_input.find(".ql-editor").find("p").text() != "" ||
       type_message_input.find(".ql-editor").find("p").find("img").length > 0
     ) {
-      this.voice_clip.$voice_clip.css("display", "none");
       this.$chat_actions.find(".message-send-button").css("display", "flex");
     } else {
-      this.voice_clip.$voice_clip.css("display", "block");
       this.$chat_actions.find(".message-send-button").css("display", "none");
     }
   }
@@ -1232,6 +1585,17 @@ export default class ChatSpace {
     await this.make_messages_html(messages_list);
     this.$chat_space_container.html(this.message_html);
     this.$chat_space.append(this.$chat_space_container);
+    
+    // Trigger initial check
+    setTimeout(() => {
+      const container = this.$chat_space_container[0];
+      if (container) {
+        const isAtBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 100;
+        const $btn = this.$chat_space.find(".cc-scroll-bottom");
+        if (isAtBottom) $btn.removeClass("visible");
+        else $btn.addClass("visible");
+      }
+    }, 200);
   }
 
   async make_messages_html(messages_list, scroll = 0) {
@@ -1245,9 +1609,7 @@ export default class ChatSpace {
         scroll
       );
       this.prevMessage = element;
-      const down_arrow_html = this.make_down_arrow_html();
       this.message_html += date_line_html;
-      this.message_html += down_arrow_html;
 
       let message_type = "sender-message";
 
@@ -1270,10 +1632,15 @@ export default class ChatSpace {
         ),
         type: message_type,
         sender: element.sender,
+        avatar: element.sender_image,
+        sender_email: element.sender_email,
         message_name: element.message_name,
         reactions: element.reactions || [],
         message_template_type: element.message_template_type,
         get_messages: element.get_messages,
+        reply_to: element.reply_to,
+        replied_message_sender: element.replied_message_sender,
+        replied_message_content: element.replied_message_content,
       });
       let attributeFound = false;
       let file_name = "";
@@ -1358,9 +1725,14 @@ export default class ChatSpace {
       time,
       type,
       sender,
+      avatar,
+      sender_email,
       message_name = "",
       message_template_type = null,
       get_messages = null,
+      reply_to = null,
+      replied_message_sender = null,
+      replied_message_content = null,
     } = params;
     const $recipient_element = $(document.createElement("div"))
       .addClass(type)
@@ -1371,21 +1743,21 @@ export default class ChatSpace {
       "message-bubble"
     );
 
-    // Messenger-style hover reaction bar
+    // Messenger-style hover reaction trigger (Global Palette approach)
     if (type !== "info-message") {
-      const $actions_bar = $(`
-        <div class="cc-message-hover-actions">
-          <div class="cc-quick-reactions">
-            <span class="cc-quick-react" data-emoji="👍">👍</span>
-            <span class="cc-quick-react" data-emoji="❤️">❤️</span>
-            <span class="cc-quick-react" data-emoji="😂">😂</span>
-            <span class="cc-quick-react" data-emoji="😮">😮</span>
-            <span class="cc-quick-react" data-emoji="😢">😢</span>
-            <span class="cc-quick-react" data-emoji="😡">😡</span>
-            <span class="cc-open-full-picker" title="More...">➕</span>
-          </div>
-        </div>
-      `);
+      const is_sender = type === "sender-message";
+      const actions_html = is_sender 
+        ? `<div class="cc-message-hover-actions">
+            <button class="cc-more-trigger" title="More"><i class="fa fa-ellipsis-v"></i></button>
+            <button class="cc-reply-trigger" title="Reply"><i class="fa fa-reply"></i></button>
+            <button class="cc-reaction-trigger" title="Add reaction" data-message="${message_name}"><i class="fa fa-smile-o"></i></button>
+          </div>`
+        : `<div class="cc-message-hover-actions">
+            <button class="cc-reaction-trigger" title="Add reaction" data-message="${message_name}"><i class="fa fa-smile-o"></i></button>
+            <button class="cc-reply-trigger" title="Reply"><i class="fa fa-reply"></i></button>
+            <button class="cc-more-trigger" title="More"><i class="fa fa-ellipsis-v"></i></button>
+          </div>`;
+      const $actions_bar = $(actions_html);
       $recipient_element.append($actions_bar);
     }
 
@@ -1393,12 +1765,53 @@ export default class ChatSpace {
       .addClass("message-name")
       .text(sender);
 
-    let $sanitized_content = __($("<div>").html(content));
+    let $sanitized_content = __($("<div>").html(parseMessageTwemoji(content)));
+    const $message_content = $(document.createElement("div")).addClass("cc-message-content");
+    
     if (type === "sender-message") {
-      $message_element.append($name_element);
+      // Use Frappe's native avatar generator (handles initials/images and avoids 404s)
+      const $avatar_container = $(document.createElement("div"))
+        .addClass("cc-message-avatar")
+        .attr("title", sender)
+        .html(frappe.get_avatar("avatar-small", sender));
+      
+      $message_content.append($avatar_container);
+      $message_content.append($name_element);
     }
+
+    const content_has_inline_reply =
+      typeof content === "string" && content.indexOf("cc-inline-reply-quote") !== -1;
+
+    if (reply_to && replied_message_sender && !content_has_inline_reply) {
+      const $replied_ui = $(`
+        <div class="cc-replied-message" data-target="${reply_to}">
+          <div class="cc-replied-user">${replied_message_sender}</div>
+          <div class="cc-replied-text">${replied_message_content || ""}</div>
+        </div>
+      `);
+      
+      $replied_ui.on("click", function() {
+        const target = $(this).data("target");
+        const $target_msg = me.$chat_space.find(`.cc-message-wrapper[data-message-name="${target}"]`);
+        if ($target_msg.length) {
+          me.$chat_space_container.animate({
+            scrollTop: me.$chat_space_container.scrollTop() + $target_msg.position().top - 100
+          }, 500);
+          
+          // Flash effect
+          $target_msg.find(".message-bubble").addClass("cc-flash-highlight");
+          setTimeout(() => {
+            $target_msg.find(".message-bubble").removeClass("cc-flash-highlight");
+          }, 2000);
+        }
+      });
+      
+      $message_element.append($replied_ui);
+    }
+
     $message_element.append($sanitized_content);
-    $recipient_element.append($message_element);
+    $message_content.append($message_element);
+    $recipient_element.append($message_content);
     if (type == "info-message") {
       if (message_template_type == "Create Group") {
         const sender_email = $sanitized_content
@@ -1592,11 +2005,11 @@ export default class ChatSpace {
       $recipient_element.html($sanitized_content);
     }
 
-    // Add reaction bar container
+    // Add reaction bar container as a badge on the bubble
     if (type !== "info-message") {
       const $reaction_bar = $(`<div class="cc-reaction-bar" data-message="${message_name}"></div>`);
       this.render_reactions($reaction_bar, params.reactions || []);
-      $recipient_element.append($reaction_bar);
+      $message_element.append($reaction_bar);
     }
 
     const me = this;
@@ -1616,13 +2029,14 @@ export default class ChatSpace {
     });
 
     if (type != "mention-message" && type != "info-message") {
+      const $target = $recipient_element.find(".cc-message-content");
       if (!get_messages) {
         const send_date = await get_time_now(me.profile.user_email, 1);
-        $recipient_element.append(
+        $target.append(
           `<div class='message-time'>${send_date}</div>`
         );
       } else {
-        $recipient_element.append(`<div class='message-time'>${time}</div>`);
+        $target.append(`<div class='message-time'>${time}</div>`);
       }
     }
     return $recipient_element;
@@ -1633,6 +2047,17 @@ export default class ChatSpace {
     file_name = null,
     file_id = null
   ) {
+    const reply_message = this.reply_to_message
+      ? {
+          reply_to: this.reply_to_message.message_name,
+          replied_message_sender: this.reply_to_message.sender_name,
+          replied_message_content: this.reply_to_message.content,
+        }
+      : {
+          reply_to: null,
+          replied_message_sender: null,
+          replied_message_content: null,
+        };
     this.$chat_space_container.removeClass("chat-space-center");
     this.$chat_space_container.find(".no-messages-info").remove();
 
@@ -1760,8 +2185,26 @@ export default class ChatSpace {
       chat_room = this.profile.room;
     }
 
-    this.$chat_actions.find(".ql-editor").html("");
-    this.voice_clip.$voice_clip.css("display", "block");
+    if (reply_message.reply_to) {
+      const reply_quote_html = `
+        <div class="cc-inline-reply-quote" data-target="${reply_message.reply_to}">
+          <div class="cc-inline-reply-user">${reply_message.replied_message_sender || ""}</div>
+          <div class="cc-inline-reply-text">${reply_message.replied_message_content || ""}</div>
+        </div>
+      `;
+      const content_html =
+        content && typeof content === "object" && content.prop
+          ? content.prop("outerHTML")
+          : content || "";
+      content = `${reply_quote_html}${content_html}`;
+    }
+
+    if (this.type_message_input) {
+      this.type_message_input.clear();
+    } else {
+      this.$chat_actions.find(".ql-editor").html("");
+    }
+    this.voice_clip.$voice_clip.css("display", "none");
     this.$chat_actions.find(".message-send-button").css("display", "none");
 
     // ================= Handling with Mentions ===========================
@@ -1878,6 +2321,7 @@ export default class ChatSpace {
           is_voice_clip: this.is_voice_clip,
           file_id: file_id,
           chat_topic: this.chat_topic,
+          ...reply_message,
         };
         this.last_chat_space_message = await send_message(message_info);
 
@@ -2002,6 +2446,7 @@ export default class ChatSpace {
           is_voice_clip: this.is_voice_clip,
           file_id: file_id,
           chat_topic: this.chat_topic,
+          ...reply_message,
         };
 
         if (this.chat_topic) {
@@ -2051,8 +2496,13 @@ export default class ChatSpace {
       file_id: file_id,
       chat_topic: this.chat_topic,
       is_screenshot: is_screenshot,
+      ...reply_message,
     };
     this.last_chat_space_message = await send_message(message_info);
+
+    // Clear reply state
+    this.reply_to_message = null;
+    this.$chat_actions.find(".cc-reply-preview-container").removeClass("visible");
 
     hide_overlay();
   } //End handle_send_message
@@ -2066,6 +2516,17 @@ export default class ChatSpace {
     old_sub_channel
   ) {
     let contributors;
+    const reply_message = this.reply_to_message
+      ? {
+          reply_to: this.reply_to_message.message_name,
+          replied_message_sender: this.reply_to_message.sender_name,
+          replied_message_content: this.reply_to_message.content,
+        }
+      : {
+          reply_to: null,
+          replied_message_sender: null,
+          replied_message_content: null,
+        };
     if (this.contributors && this.contributors.length > 0) {
       contributors = this.contributors.concat(mention_users);
     } else {
@@ -2076,8 +2537,12 @@ export default class ChatSpace {
     const mention_msg = `
   <div class="add-user" data-template="added_user_template"><span class="sender-user" data-user="${this.profile.user_email}"></span><span> added </span><span class="receiver-user" data-user="${mentioned_users_emails}"></span></div>`;
 
-    this.$chat_actions.find(".ql-editor").html("");
-    this.voice_clip.$voice_clip.css("display", "block");
+    if (this.type_message_input) {
+      this.type_message_input.clear();
+    } else {
+      this.$chat_actions.find(".ql-editor").html("");
+    }
+    this.voice_clip.$voice_clip.css("display", "none");
     this.$chat_actions.find(".message-send-button").css("display", "none");
 
     this.last_active_sub_channel = await create_sub_channel({
@@ -2100,6 +2565,7 @@ export default class ChatSpace {
       message_type: "information",
       message_template_type: "Add User",
       chat_topic: this.chat_topic,
+      ...reply_message,
     };
     await send_message(mention_message_info);
     update_sub_channel_for_last_message(
@@ -2565,6 +3031,9 @@ export default class ChatSpace {
         sender: res.user,
         message_name: res.message_name,
         message_template_type: res.message_template_type,
+        reply_to: res.reply_to,
+        replied_message_sender: res.replied_message_sender,
+        replied_message_content: res.replied_message_content,
       });
       let attributeFound = false;
       let file_name = "";
@@ -2597,10 +3066,12 @@ export default class ChatSpace {
     const me = this;
     this.$wrapper.css("display", "");
     this.$wrapper.html(this.$chat_space);
-    this.$chat_space_container.animate(
-      { scrollTop: this.$chat_space_container.prop("scrollHeight") },
-      "fast"
-    );
+    if (this.$chat_space_container && this.$chat_space_container.length > 0) {
+      this.$chat_space_container.animate(
+        { scrollTop: this.$chat_space_container.prop("scrollHeight") },
+        "fast"
+      );
+    }
     this.setup_events();
   }
 
@@ -2938,6 +3409,7 @@ export default class ChatSpace {
   }
 
   async on_scroll() {
+    this.$chat_space.find(".cc-global-reaction-palette").removeClass("active");
     const me = this;
     // loading old messages
     if (me.$chat_space_container.scrollTop() == 0) {
@@ -3551,7 +4023,7 @@ insertTemplateText (text) {
         <span class="cc-reaction-badge ${is_active ? 'active' : ''}" 
               data-emoji="${react.emoji}" 
               title="${usernames}">
-          <span class="cc-rb-emoji">${react.emoji}</span>
+          <span class="cc-rb-emoji">${renderEmoji(react.emoji)}</span>
           <span class="cc-rb-count">${react.count}</span>
         </span>
       `);
