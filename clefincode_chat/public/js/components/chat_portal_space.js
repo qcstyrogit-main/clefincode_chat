@@ -5,6 +5,7 @@ import {
   get_t,
   scroll_to_bottom,
   get_current_datetime,
+  convert_emoticons_to_emojis,
 } from "./erpnext_chat_utils";
 
 export default class ChatPortalSpace {
@@ -133,10 +134,9 @@ export default class ChatPortalSpace {
   }
 
   async receive_message(res, time) {
-    let chat_type = "sender-message";
-
+    let chat_type = "recipient-message";
     if (res.sender_email == this.profile.user_email) {
-      chat_type = "recipient-message";
+      chat_type = "sender-message";
     }
 
     this.$chatbot_container.append(
@@ -168,10 +168,9 @@ export default class ChatPortalSpace {
       this.prevMessage = element;
       this.message_html += date_line_html;
 
-      let message_type = "sender-message";
-
+      let message_type = "recipient-message";
       if (element.sender_email === this.profile.user_email) {
-        message_type = "recipient-message";
+        message_type = "sender-message";
       }
 
       const message_content = await this.make_message({
@@ -237,13 +236,14 @@ export default class ChatPortalSpace {
     }
 
     let content = this.$chatbot_space.find(".cc-type-message-input").val();
+    content = convert_emoticons_to_emojis(content);
     this.is_link = null;
 
     this.$chatbot_container.append(
       await this.make_message({
         content: content,
         time: get_current_time(),
-        type: "recipient-message",
+        type: "sender-message",
       })
     );
     scroll_to_bottom(this.$chatbot_container);

@@ -362,6 +362,42 @@ function hide_overlay() {
   }
 }
 
+function convert_emoticons_to_emojis(text) {
+  if (!text || typeof text !== "string") return text;
+  const emoticon_map = {
+    "<3": "❤️",
+    ":)": "😊",
+    ":-)": "😊",
+    ":(": "☹️",
+    ":-(": "☹️",
+    ":P": "😛",
+    ":-P": "😛",
+    ":D": "😀",
+    ":-D": "😀",
+    ";)": "😉",
+    ";-)": "😉",
+    "B)": "😎",
+    "B-)": "😎",
+    ":O": "😮",
+    ":-O": "😮",
+    ":*": "😘",
+    ":-*": "😘",
+    ":/": "😕",
+    ":-/": "😕",
+    "-_-": "😑",
+    "O:)": "😇",
+    "3:)": "😈",
+  };
+  
+  let result = text;
+  for (const [emoticon, emoji] of Object.entries(emoticon_map)) {
+    const escaped = emoticon.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escaped, "g");
+    result = result.replace(regex, emoji);
+  }
+  return result;
+}
+
 export {
   get_time,
   scroll_to_bottom,
@@ -395,5 +431,6 @@ export {
   get_chat_members,
   check_if_contributor_active,
   show_overlay,
-  hide_overlay
+  hide_overlay,
+  convert_emoticons_to_emojis
 };

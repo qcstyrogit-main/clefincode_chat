@@ -114,6 +114,13 @@
 
       .sender-message {
         .message-bubble {
+          background: linear-gradient(135deg, #0084ff 0%, #0078ff 100%);
+          color: #ffffff;
+        }
+      }
+
+      .recipient-message {
+        .message-bubble {
           background: #394149;
           color: #f9f9f9;
         }
@@ -135,6 +142,13 @@
       }
 
       .sender-message {
+        .message-bubble {
+          background: linear-gradient(135deg, #0084ff 0%, #0078ff 100%);
+          color: #ffffff;
+        }
+      }
+
+      .recipient-message {
         .message-bubble {
           background: #394149;
           color: #f9f9f9;

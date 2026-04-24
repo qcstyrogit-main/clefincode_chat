@@ -22,6 +22,7 @@ import {
   check_if_contributor_active,
   hide_overlay,
   show_overlay,
+  convert_emoticons_to_emojis,
 } from "./erpnext_chat_utils";
 import { check_if_contact_has_chat } from "./erpnext_chat_contact";
 import TypeMessageInput from "./type_message_input";
@@ -666,11 +667,19 @@ export default class ChatSpace {
     this.$chat_space.on("click", ".cc-reply-trigger", function(e) {
       const $wrapper = $(this).closest(".cc-message-wrapper");
       const message_name = $wrapper.data("message-name");
-      const sender_name = $wrapper.hasClass("recipient-message")
+      const sender_name = $wrapper.hasClass("sender-message")
         ? "You"
-        : $wrapper.find(".message-name").text() || "User";
+        : $wrapper.find(".message-name").text() && $wrapper.find(".message-name").text() !== "User"
+          ? $wrapper.find(".message-name").text()
+          : me.profile.room_name || "User";
       const $bubble_clone = $wrapper.find(".message-bubble").clone();
-      $bubble_clone.find(".cc-replied-message").remove();
+      $bubble_clone.find(".cc-replied-message, .cc-inline-reply-quote, .message-name, .message-time, .cc-reaction-bar").remove();
+      
+      // Replace emoji images with their text characters so .text() can see them
+      $bubble_clone.find("img.cc-twemoji").each(function() {
+        $(this).replaceWith($(this).attr("alt"));
+      });
+      
       const content = $bubble_clone.text().replace(/\s+/g, " ").trim();
 
       me.reply_to_message = {
@@ -681,7 +690,7 @@ export default class ChatSpace {
 
       const $preview = me.$chat_actions.find(".cc-reply-preview-container");
       $preview.find(".cc-reply-user").text(`Replying to ${sender_name}`);
-      $preview.find(".cc-reply-text").text(content);
+      $preview.find(".cc-reply-text").html(parseMessageTwemoji(content));
       $preview.addClass("visible");
 
       // Focus the input
@@ -1599,13 +1608,13 @@ export default class ChatSpace {
       this.prevMessage = element;
       this.message_html += date_line_html;
 
-      let message_type = "sender-message";
+      let message_type = "recipient-message";
 
       if (element.sender_email === this.profile.user_email) {
-        message_type = "recipient-message";
+        message_type = "sender-message";
       } else if (this.profile.room_type === "Guest") {
         if (this.profile.is_admin === true && element.sender !== "Guest") {
-          message_type = "recipient-message";
+          message_type = "sender-message";
         }
       }
       if (element.message_type == "information") {
@@ -1772,7 +1781,7 @@ export default class ChatSpace {
       const $replied_ui = $(`
         <div class="cc-replied-message" data-target="${reply_to}">
           <div class="cc-replied-user">${replied_message_sender}</div>
-          <div class="cc-replied-text">${replied_message_content || ""}</div>
+          <div class="cc-replied-text">${parseMessageTwemoji(replied_message_content) || ""}</div>
         </div>
       `);
       
@@ -2056,6 +2065,7 @@ export default class ChatSpace {
 
     const $input = this.$chat_actions.find(".type-message");
     let content = $input.val() ? $input.val().trim() : "";
+    content = convert_emoticons_to_emojis(content);
 
     if (content.length === 0 && !attachment) {
       return;
@@ -2289,10 +2299,7 @@ export default class ChatSpace {
           });
 
         const message_info = {
-          content:
-            content && content.length == 1
-              ? content.prop("outerHTML")
-              : content,
+          content: content,
           user: this.profile.user,
           room: chat_room,
           email: this.profile.user_email,
@@ -2414,10 +2421,7 @@ export default class ChatSpace {
       // =========================================================================
       else if (mention_doctypes.length > 0) {
         let message_info = {
-          content:
-            content && content.length == 1
-              ? content.prop("outerHTML")
-              : content,
+          content: content,
           user: this.profile.user,
           room: chat_room,
           email: this.profile.user_email,
@@ -2465,8 +2469,7 @@ export default class ChatSpace {
     // ================= End Handling with Mentions ===========================
 
     const message_info = {
-      content:
-        content && content.length == 1 ? content.prop("outerHTML") : content,
+      content: content,
       user: this.profile.user,
       room: chat_room,
       email: this.profile.user_email,
@@ -2990,14 +2993,15 @@ export default class ChatSpace {
       );
     }
 
-    let chat_type = "sender-message";
-
+    let chat_type = "recipient-message";
     if (res.sender_email == this.profile.user_email) {
-      chat_type = "recipient-message";
+      chat_type = "sender-message";
     }
-
+    
     if (this.profile.room_type === "Guest") {
-      if (this.profile.is_admin === true && res.user !== "Guest") {
+      if (this.profile.is_admin === true && res.user !== "Guest" && res.sender_email === this.profile.user_email) {
+        chat_type = "sender-message";
+      } else if (this.profile.is_admin === true && res.user === "Guest") {
         chat_type = "recipient-message";
       }
     }
