@@ -1777,227 +1777,61 @@ export default class ChatSpace {
     const content_has_inline_reply =
       typeof content === "string" && content.indexOf("cc-inline-reply-quote") !== -1;
 
-    if (reply_to && replied_message_sender && !content_has_inline_reply) {
-      const $replied_ui = $(`
-        <div class="cc-replied-message" data-target="${reply_to}">
-          <div class="cc-replied-user">${replied_message_sender}</div>
-          <div class="cc-replied-text">${parseMessageTwemoji(replied_message_content) || ""}</div>
-        </div>
-      `);
-      
-      $replied_ui.on("click", function() {
-        const target = $(this).data("target");
-        const $target_msg = me.$chat_space.find(`.cc-message-wrapper[data-message-name="${target}"]`);
-        if ($target_msg.length) {
-          me.$chat_space_container.animate({
-            scrollTop: me.$chat_space_container.scrollTop() + $target_msg.position().top - 100
-          }, 500);
-          
-          // Flash effect
-          $target_msg.find(".message-bubble").addClass("cc-flash-highlight");
-          setTimeout(() => {
-            $target_msg.find(".message-bubble").removeClass("cc-flash-highlight");
-          }, 2000);
-        }
-      });
-      
-      $message_element.append($replied_ui);
+    // Handle Reply Structure (Messenger Style)
+    let reply_header_html = "";
+    let nested_reply_html = "";
+
+    // Robust extraction: Check both parameters and inline HTML
+    let r_user = replied_message_sender;
+    let r_text = replied_message_content;
+    let r_target = reply_to;
+
+    // Check if content has the inline quote (even if parameters are missing)
+    const $temp_content = $("<div>").html(params.content);
+    const $quote = $temp_content.find(".cc-inline-reply-quote");
+    
+    if ($quote.length) {
+      r_user = r_user || $quote.find(".cc-inline-reply-user").text();
+      r_text = r_text || $quote.find(".cc-inline-reply-text").html();
+      r_target = r_target || $quote.data("target");
+      $quote.remove();
+      params.content = $temp_content.html(); // Clean the content
     }
 
-    $message_element.append($sanitized_content);
+    if (r_user && (r_text || r_target)) {
+      const is_me_replying = sender_email === this.profile.user_email;
+      reply_header_html = `
+        <div class="cc-reply-header ${is_me_replying ? 'is-me' : ''}">
+          <i class="fa fa-reply"></i>
+          <span>${is_me_replying ? 'You' : (params.sender || 'User')} replied to ${r_user === this.profile.user_email ? (is_me_replying ? 'yourself' : 'you') : r_user}</span>
+        </div>
+      `;
+
+      nested_reply_html = `
+        <div class="cc-nested-reply-quote" data-target="${r_target}">
+          <div class="cc-nested-reply-text">${r_text || ""}</div>
+        </div>
+      `;
+    }
+
+    if (reply_header_html) {
+      $recipient_element.append(reply_header_html);
+    }
+
+    if (nested_reply_html) {
+      $message_element.append(nested_reply_html);
+      $message_element.addClass("has-reply");
+    }
+
+    const $main_text_container = $(document.createElement("div")).addClass("cc-bubble-main-text");
+    $main_text_container.append(__($("<div>").html(parseMessageTwemoji(params.content))));
+    $message_element.append($main_text_container);
     $message_content.append($message_element);
     $recipient_element.append($message_content);
     if (type == "info-message") {
       if (message_template_type == "Create Group") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-        // =================== Handling with information messages ========================
-      } else if (message_template_type == "Add User") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        const receiver_email = $sanitized_content
-          .find(".receiver-user")
-          .attr("data-user")
-          .split(", ");
-
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-
-        if (receiver_email.includes(this.profile.user_email)) {
-          const index = receiver_email.indexOf(this.profile.user_email);
-          if (index !== -1) {
-            receiver_email[index] = "you";
-          }
-          let usernames = [];
-          usernames = await Promise.all(
-            receiver_email.map(async (email) => {
-              if (email !== "you") {
-                return await get_profile_full_name(email.trim());
-              }
-              return email;
-            })
-          );
-          const you_index = usernames.indexOf("you");
-          if (you_index !== -1) {
-            const you_element = usernames.splice(you_index, 1);
-            usernames.unshift(you_element);
-          }
-          $sanitized_content.find(".receiver-user").html(usernames.join(", "));
-        } else {
-          let usernames = [];
-          usernames = await Promise.all(
-            receiver_email.map(async (email) => {
-              return await get_profile_full_name(email.trim());
-            })
-          );
-          $sanitized_content.find(".receiver-user").html(usernames.join(", "));
-        }
-      }
-      // ===========================================
-      else if (message_template_type == "Remove User") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        const receiver_email = $sanitized_content
-          .find(".receiver-user")
-          .attr("data-user");
-
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-
-        if (receiver_email == this.profile.user_email) {
-          $sanitized_content.find(".receiver-user").html("you");
-        } else {
-          const receiver_name = await get_profile_full_name(receiver_email);
-          $sanitized_content.find(".receiver-user").html(receiver_name);
-        }
-      }
-      // ===========================================
-      else if (message_template_type == "User Left") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-      }
-      // ===========================================
-      else if (message_template_type == "Rename Group") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-      }
-      // ===========================================
-      else if (message_template_type == "Set Topic") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-      }
-      // ===========================================
-      else if (message_template_type == "Add Doctype") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-      }
-      // ===========================================
-      else if (message_template_type == "Remove Topic") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-      }
-      // ===========================================
-      else if (message_template_type == "Remove Doctype") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-      }
-      // ===========================================
-      else if (message_template_type == "Rename Topic") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-      }
-      // ===========================================
-      else if (message_template_type == "Set Topic Status") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-      }
-      // ===========================================
-      else if (message_template_type == "Remove Contributors") {
-        const sender_email = $sanitized_content
-          .find(".sender-user")
-          .attr("data-user");
-        if (sender_email == this.profile.user_email) {
-          $sanitized_content.find(".sender-user").html("You");
-        } else {
-          const sender_name = await get_profile_full_name(sender_email);
-          $sanitized_content.find(".sender-user").html(sender_name);
-        }
-      }
-      // ===========================================
-      $recipient_element.html($sanitized_content);
+      // Handled above for Web structure
+      $recipient_element.html(__($("<div>").html(parseMessageTwemoji(params.content))));
     }
 
     // Add reaction bar container as a badge on the bubble

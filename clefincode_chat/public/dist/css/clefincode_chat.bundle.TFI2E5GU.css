@@ -1,6 +1,6 @@
 @charset "UTF-8";
 
-/* ../../../../../tmp/tmp-9972-eKrdqnd84JJq/19dbde3e4785a/font-awesome.min.css */
+/* ../../../../../tmp/tmp-9972-eKrdqnd84JJq/19dbe8920fc7d/font-awesome.min.css */
 @font-face {
   font-family: "FontAwesome";
   src: url(/assets/frappe/css/fonts/fontawesome/fontawesome-webfont.eot?v=4.7.0);
@@ -3816,6 +3816,47 @@
 .chatbot-space .chatbot-container .date-line .between-lines {
   max-width: 100%;
 }
+.chatbot-space .chatbot-container .cc-reply-header {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: #8e8e8e;
+  margin-bottom: 4px;
+  padding: 0 10px;
+}
+.chatbot-space .chatbot-container .cc-reply-header i {
+  font-size: 10px;
+  margin-right: 5px;
+  transform: scaleX(-1);
+}
+.chatbot-space .chatbot-container .cc-reply-header.is-me {
+  justify-content: flex-end;
+}
+.chatbot-space .chatbot-container .message-bubble.has-reply {
+  padding-top: 0 !important;
+  overflow: hidden;
+}
+.chatbot-space .chatbot-container .message-bubble .cc-nested-reply-quote {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 6px 12px;
+  margin: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.chatbot-space .chatbot-container .message-bubble .cc-nested-reply-quote:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.chatbot-space .chatbot-container .message-bubble .cc-nested-reply-quote .cc-nested-reply-text {
+  font-size: 11px;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chatbot-space .chatbot-container .message-bubble .cc-bubble-main-text {
+  padding: 8px 12px;
+}
 .chatbot-space .chat-space-actions {
   padding: 3px 12px 12px 12px;
   min-height: 50px;
@@ -5862,50 +5903,6 @@
 .cc-message-wrapper.recipient-message .cc-inline-reply-text {
   color: #5a3415;
 }
-.cc-inline-reply-quote {
-  background: rgba(255, 255, 255, 0.1);
-  border-left: 3px solid #0084ff;
-  padding: 7px 10px;
-  border-radius: 10px;
-  margin-bottom: 8px;
-  font-size: 0.9em;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-.cc-inline-reply-user {
-  font-weight: 600;
-  font-size: 0.85em;
-  color: #1a73e8;
-  margin-bottom: 2px;
-}
-.cc-inline-reply-text {
-  color: #4b5563;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.cc-message-wrapper.sender-message .cc-inline-reply-quote {
-  background: rgba(255, 255, 255, 0.96);
-  border-left-color: #b46f1f;
-  border: 1px solid rgba(180, 111, 31, 0.16);
-}
-.cc-message-wrapper.sender-message .cc-inline-reply-user {
-  color: #8a4f13;
-}
-.cc-message-wrapper.sender-message .cc-inline-reply-text {
-  color: #5a3415;
-}
-.cc-message-wrapper.recipient-message .cc-inline-reply-quote {
-  background: rgba(255, 251, 246, 0.98);
-  border-right: 1px solid rgba(180, 111, 31, 0.16);
-}
-.cc-message-wrapper.recipient-message .cc-inline-reply-user {
-  color: #8a4f13;
-}
-.cc-message-wrapper.recipient-message .cc-inline-reply-text {
-  color: #5a3415;
-}
 [data-theme=dark] .cc-reply-preview-container {
   background: #2a2a2a;
   border-top-color: #444;
@@ -6155,4 +6152,4 @@
  *  Font Awesome 4.7.0 by @davegandy - http://fontawesome.io - @fontawesome
  *  License - http://fontawesome.io/license (Font: SIL OFL 1.1, CSS: MIT License)
  */
-/*# sourceMappingURL=clefincode_chat.bundle.MW3IXRJ2.css.map */
+/*# sourceMappingURL=clefincode_chat.bundle.TFI2E5GU.css.map */

@@ -973,6 +973,57 @@ $height: 582px;
         max-width: 100%;
       }
     }
+
+    .cc-reply-header {
+      display: flex;
+      align-items: center;
+      font-size: 11px;
+      color: #8e8e8e;
+      margin-bottom: 4px;
+      padding: 0 10px;
+
+      i {
+        font-size: 10px;
+        margin-right: 5px;
+        transform: scaleX(-1);
+      }
+
+      &.is-me {
+        justify-content: flex-end;
+      }
+    }
+
+    .message-bubble {
+      &.has-reply {
+        padding-top: 0 !important;
+        overflow: hidden;
+      }
+
+      .cc-nested-reply-quote {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 6px 12px;
+        margin: 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        cursor: pointer;
+        transition: background 0.2s;
+
+        &:hover {
+          background: rgba(0, 0, 0, 0.08);
+        }
+
+        .cc-nested-reply-text {
+          font-size: 11px;
+          opacity: 0.8;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      }
+
+      .cc-bubble-main-text {
+        padding: 8px 12px;
+      }
+    }
   }
 
   .chat-space-actions {
