@@ -1830,8 +1830,9 @@ export default class ChatSpace {
     $recipient_element.append($message_content);
     if (type == "info-message") {
       if (message_template_type == "Create Group") {
-      // Handled above for Web structure
-      $recipient_element.html(__($("<div>").html(parseMessageTwemoji(params.content))));
+        // Handled above for Web structure
+        $recipient_element.html(__($("<div>").html(parseMessageTwemoji(params.content))));
+      }
     }
 
     // Add reaction bar container as a badge on the bubble
