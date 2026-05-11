@@ -26,6 +26,8 @@ try:
 	from frappe.desk.form.load import get_point_logs
 except ImportError:
 	def get_point_logs(doctype, docname):
+		if not frappe.db.exists("DocType", "Energy Point Log"):
+			return []
 		return frappe.get_all(
 			"Energy Point Log",
 			filters={"reference_doctype": doctype, "reference_name": docname, "type": ["!=", "Review"]},
