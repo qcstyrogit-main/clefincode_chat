@@ -28,7 +28,7 @@ web_include_js = ['clefincode_chat.bundle.js'] if is_frappe_above_v13 else [
 app_include_css = ['clefincode_chat.bundle.css'] if is_frappe_above_v13 else [
     '/assets/css/clefincode_chat.css']
 
-app_include_js = ['clefincode_chat.bundle.js' , 'override.bundle.js','send_doctype.js'] if is_frappe_above_v13 else [
+app_include_js = ['clefincode_chat.bundle.js' , 'override.bundle.js'] if is_frappe_above_v13 else [
     '/assets/js/clefincode_chat.js' ,  '/assets/js/override.js']
 
 # web_include_css = "/assets/clefincode_chat/css/clefincode_chat.css"
@@ -43,7 +43,7 @@ app_include_js = ['clefincode_chat.bundle.js' , 'override.bundle.js','send_docty
 
 # include js in page
 # page_js = {"page" : "public/js/file.js"}
-page_js ={"chat-portal" : "public/js/chat_portal/chat_portal.js"}
+# page_js ={"chat-portal" : "public/js/chat_portal/chat_portal.js"}
 
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}

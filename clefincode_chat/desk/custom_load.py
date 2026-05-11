@@ -9,14 +9,15 @@ import frappe.defaults
 import frappe.desk.form.meta
 import frappe.share
 import frappe.utils
-from frappe import _, _dict
+from frappe import _, _dict, __version__ as frappe_version
 from frappe.desk.form.document_follow import is_document_followed
-from frappe.model.utils import is_virtual_doctype
 from frappe.model.utils.user_settings import get_user_settings
-from frappe.permissions import get_doc_permissions
+from frappe.permissions import check_doctype_permission, get_doc_permissions
 from frappe.utils.data import cstr
 from clefincode_chat.api.api_1_2_1.api import get_contact_full_name, check_if_user_has_permission_to_file
-from frappe.desk.form.load import run_onload ,set_link_titles, _get_communications, add_comments, update_user_info, get_attachments, get_versions, get_assignments, get_doc_permissions, get_point_logs, get_additional_timeline_content, get_milestones,is_document_followed, get_tags, get_document_email
+from frappe.desk.form.load import run_onload, set_link_titles, _get_communications, add_comments, update_user_info, get_attachments, get_versions, get_assignments, get_doc_permissions, get_point_logs, get_additional_timeline_content, get_milestones, is_document_followed, get_tags, get_document_email
+
+_is_v16_or_above = int(frappe_version.split(".")[0]) >= 16
 
 
 @frappe.whitelist()
@@ -29,27 +30,30 @@ def getdoc(doctype, name, user=None):
 	if not (doctype and name):
 		raise Exception("doctype and name required!")
 
-	if not name:
-		name = doctype
-
-	if not is_virtual_doctype(doctype) and not frappe.db.exists(doctype, name):
+	try:
+		doc = frappe.get_doc(doctype, name)
+	except frappe.DoesNotExistError:
+		check_doctype_permission(doctype)
+		frappe.clear_last_message()
 		return []
 
-	doc = frappe.get_doc(doctype, name)
-	run_onload(doc)
-	
-	
 	has_access = False
 	if doctype == "File" and doc.attached_to_doctype == "ClefinCode Chat Message":
 		has_access = check_if_user_has_permission_to_file(doc.attached_to_name)
 
 	if not has_access:
 		if not doc.has_permission("read"):
+			check_doctype_permission(doctype)
 			frappe.flags.error_message = _("Insufficient Permission for {0}").format(
-				frappe.bold(doctype + " " + name)
+				frappe.bold(_(doctype) + " " + name)
 			)
 			raise frappe.PermissionError(("read", doctype, name))
 
+	if _is_v16_or_above:
+		if (key := frappe.can_cache_doc((doctype, name))) and frappe.cache.exists(key):
+			frappe._set_document_in_cache(key, doc)
+
+	run_onload(doc)
 	doc.apply_fieldlevel_read_permissions()
 
 	# add file list
