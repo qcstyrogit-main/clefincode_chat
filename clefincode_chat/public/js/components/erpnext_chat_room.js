@@ -17,6 +17,7 @@ export default class ChatRoom {
     this.$chat_rooms_container = opts.$chat_rooms_container;
     this.profile = opts.element;
     this.chat_status = opts.chat_status;
+    this.on_open = opts.on_open || null;
     this.setup();
   }
   
@@ -266,6 +267,11 @@ export default class ChatRoom {
       me.click_on_chat_room();
       if (me.expand == 1) {
         me.expand = 0;
+        return;
+      }
+
+      if (me.on_open) {
+        me.on_open(me.profile, me.$chat_room, me.chat_status);
         return;
       }
 

@@ -83,6 +83,10 @@ app_include_js = ['clefincode_chat.bundle.js' , 'override.bundle.js'] if is_frap
 # before_install = "clefincode_chat.install.before_install"
 after_install = "clefincode_chat.setup.install.after_install"
 after_migrate  = "clefincode_chat.setup.after_migrate.after_migrate"
+
+fixtures = [
+    {"dt": "Workspace", "filters": [["name", "in", ["ClefinCode Chat"]]]}
+]
 # Uninstallation
 # ------------
 

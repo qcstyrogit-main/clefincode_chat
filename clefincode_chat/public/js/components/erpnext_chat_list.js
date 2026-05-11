@@ -13,7 +13,8 @@ export default class ChatList {
     this.time_zone = opts.time_zone;
     this.user_type = opts.user_type;
     this.is_limited_user = opts.is_limited_user;
-    
+    this.on_room_open = opts.on_room_open || null;
+
     this.is_pined = this.get_pin_cookie();
     this.is_open = 1;
     this.limit = 10;
@@ -285,7 +286,8 @@ export default class ChatList {
           $wrapper: this.$wrapper,
           $chat_rooms_container: this.$chat_rooms_group_container,
           element: profile,
-          chat_status : element.chat_status
+          chat_status: element.chat_status,
+          on_open: this.on_room_open,
         }),
       ]);
     });
@@ -748,6 +750,7 @@ async render_messages(signal = null) {
         $wrapper: this.$wrapper,
         $chat_rooms_container: this.$chat_rooms_group_container,
         element: profile,
+        on_open: this.on_room_open,
       }),
     ]);
     this.chat_room_groups[0][1].render("prepend");

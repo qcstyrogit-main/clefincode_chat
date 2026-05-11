@@ -1,7 +1,10 @@
-import { ChatBubble, ChatPortalSpace, ChatList } from "./components";
+import { ChatBubble, ChatPortalSpace, ChatList, ChatSpace } from "./components";
 
 frappe.provide("frappe.ErpnextChat");
 frappe.provide("frappe.ErpnextChat.settings");
+frappe.provide("frappe.ClefinCodeChat");
+frappe.ClefinCodeChat.ChatList = ChatList;
+frappe.ClefinCodeChat.ChatSpace = ChatSpace;
 
 frappe.ErpnextChat = class {
   constructor() {

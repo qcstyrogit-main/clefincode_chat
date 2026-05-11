@@ -1,0 +1,40 @@
+{
+ "charts": [],
+ "content": "[]",
+ "creation": "2026-05-11 00:00:00.000000",
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "small-message",
+ "is_hidden": 0,
+ "label": "ClefinCode Chat",
+ "modified": "2026-05-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ClefinCode Chat",
+ "name": "ClefinCode Chat",
+ "owner": "Administrator",
+ "public": 1,
+ "restrict_to_domain": "",
+ "roles": [],
+ "sequence_id": 99.0,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "icon": "small-message",
+   "label": "Chat",
+   "link_to": "clefincode-chat",
+   "name": "clefincode-chat-shortcut",
+   "type": "Page"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "icon": "settings",
+   "label": "Chat Settings",
+   "link_to": "ClefinCode Chat Settings",
+   "name": "clefincode-chat-settings-shortcut",
+   "type": "DocType"
+  }
+ ],
+ "title": "ClefinCode Chat"
+}
