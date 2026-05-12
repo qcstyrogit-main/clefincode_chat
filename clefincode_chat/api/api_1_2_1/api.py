@@ -1393,10 +1393,29 @@ def toggle_message_reaction(message_name=None, emoji=None, user_email=None, room
             # Fallback: broadcast to room event
             frappe.publish_realtime(event=room, message=realtime_payload)
 
+        # Store update in cache so polling can pick it up
+        cache_key = f"cc_reaction_updates_{room}"
+        updates = frappe.cache().get_value(cache_key) or []
+        updates.append({
+            "message_name": message_name,
+            "reactions": updated_reactions,
+            "timestamp": frappe.utils.now(),
+        })
+        frappe.cache().set_value(cache_key, updates[-100:], expires_in_sec=60)
+
         return {"results": [{"status": "ok", "reactions": updated_reactions}]}
     except Exception as e:
         frappe.log_error(title="toggle_message_reaction error", message=str(e))
         return {"results": [{"status": "error", "message": str(e)}]}
+# ==========================================================================================
+@frappe.whitelist()
+def get_reaction_updates(room, user_email, since):
+    """Return reaction updates newer than `since` (UTC datetime string) for polling."""
+    cache_key = f"cc_reaction_updates_{room}"
+    updates = frappe.cache().get_value(cache_key) or []
+    recent = [u for u in updates if u.get("timestamp", "") > since]
+    return {"updates": recent}
+
 # ==========================================================================================
 @frappe.whitelist()
 def get_messages_latest(room , user_email , room_type, remove_date = None , lastmessagedate = None):

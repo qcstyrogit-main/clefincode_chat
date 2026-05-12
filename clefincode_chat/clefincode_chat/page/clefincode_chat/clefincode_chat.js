@@ -1,4 +1,4 @@
-frappe.pages["clefincode-chat"].on_load = async function (wrapper) {
+frappe.pages["clefincode-chat"].on_page_load = async function (wrapper) {
 	frappe.ui.make_app_page({
 		parent: wrapper,
 		title: __("Chat"),
@@ -15,8 +15,8 @@ frappe.pages["clefincode-chat"].on_load = async function (wrapper) {
 
 	// Wait for the main chat app to finish initialising (it runs on DOMContentLoaded)
 	let app = window.erpnext_chat_app;
-	if (!app || !app.res) {
-		await new Promise((resolve) => setTimeout(resolve, 800));
+	for (let i = 0; i < 20 && (!app || !app.res); i++) {
+		await new Promise((resolve) => setTimeout(resolve, 300));
 		app = window.erpnext_chat_app;
 	}
 
@@ -36,7 +36,7 @@ frappe.pages["clefincode-chat"].on_load = async function (wrapper) {
 	window.clefincode_messenger_page.render();
 };
 
-frappe.pages["clefincode-chat"].on_page_show = function () {
+frappe.pages["clefincode-chat"].on_page_show = function (wrapper) {
 	// Re-highlight the active room when navigating back to the page
 	const page = window.clefincode_messenger_page;
 	if (page && page.active_room) {

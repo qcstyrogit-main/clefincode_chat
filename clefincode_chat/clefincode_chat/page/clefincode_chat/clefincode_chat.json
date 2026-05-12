@@ -13,6 +13,9 @@
   },
   {
    "role": "System Manager"
+  },
+  {
+   "role": "All"
   }
  ],
  "title": "Chat"

@@ -215,7 +215,8 @@ save_all_contacts(dialog) {
     this.setup_header();
     if (
       typeof this.chat_space.$wrapper.attr("data-room") != "undefined" ||
-      this.roomtype == "Topic"
+      this.roomtype == "Topic" ||
+      this.chat_space.profile.room
     ) {
       this.setup_body();
     } else {

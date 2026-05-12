@@ -3898,9 +3898,35 @@ def get_users_for_mentions(room = None):
     )
 # ==========================================================================================
 @frappe.whitelist()
+def get_typing_state(room, user_email):
+    """Return list of users currently typing in a room (for polling fallback)."""
+    from frappe.utils import time_diff_in_seconds, now as frappe_now
+    cache_key = f"cc_typing_{room}"
+    typing_state = frappe.cache().get_value(cache_key) or {}
+    active_typers = []
+    for u_email, data in typing_state.items():
+        if u_email == user_email:
+            continue
+        try:
+            if time_diff_in_seconds(frappe_now(), data["timestamp"]) < 5:
+                active_typers.append({"user": u_email, "first_name": data["first_name"]})
+        except Exception:
+            pass
+    return {"typers": active_typers}
+
+
+@frappe.whitelist()
 def set_typing(user, room, is_typing, last_active_sub_channel = None, mobile_app = None,text=None):
     parent_channel_doc = frappe.get_doc("ClefinCode Chat Channel" , room)
     first_name = get_contact_first_name(user)
+    # Store typing state in cache for polling fallback
+    cache_key = f"cc_typing_{room}"
+    typing_state = frappe.cache().get_value(cache_key) or {}
+    if is_typing == "true":
+        typing_state[user] = {"first_name": first_name, "timestamp": frappe.utils.now()}
+    else:
+        typing_state.pop(user, None)
+    frappe.cache().set_value(cache_key, typing_state, expires_in_sec=10)
     template_option=False
     if is_typing and text and text.startswith("/"):
       
@@ -6611,3 +6637,41 @@ def generate_pdf_with_getpdf(
         "file_name": file_name,
         "file_id": file_doc.name
     }
+
+
+@frappe.whitelist()
+def upload_chat_file():
+	"""Upload a file for chat messages. save_file() already ignores permissions internally."""
+	files = frappe.request.files
+	if "file" not in files:
+		frappe.throw("No file provided")
+
+	file_obj = files["file"]
+	content = file_obj.stream.read()
+	filename = file_obj.filename or "pasted-image.png"
+
+	from mimetypes import guess_type
+	content_type = guess_type(filename)[0] or "application/octet-stream"
+	if content_type.startswith("image/"):
+		try:
+			from frappe.utils.image import optimize_image
+			content = optimize_image(content, content_type)
+		except Exception:
+			pass
+
+	# Upload as private to avoid the System Manager restriction on public files.
+	# /private/files/ is accessible to any authenticated user.
+	file_doc = save_file(
+		fname=filename,
+		content=content,
+		dt=None,
+		dn=None,
+		is_private=1,
+	)
+
+	return {
+		"file_url": file_doc.file_url,
+		"file_name": file_doc.file_name,
+		"name": file_doc.name,
+		"doctype": "File",
+	}

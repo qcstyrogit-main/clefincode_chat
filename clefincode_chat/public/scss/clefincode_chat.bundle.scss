@@ -20,8 +20,8 @@ $height: 582px;
 
 .chat-app {
   position: fixed;
-  bottom: 0px;
-  right: 16px;
+  bottom: 24px;
+  right: 20px;
   width: auto;
   /* Don't block the whole screen width */
   height: auto;
@@ -128,8 +128,8 @@ $height: 582px;
 
     #chat-bubble>.badge {
       position: relative;
-      top: -70px;
-      right: -45px;
+      top: -50px;
+      right: -35px;
       background-color: red;
       color: white;
       font-size: 12px;
@@ -166,11 +166,26 @@ $height: 582px;
       cursor: pointer;
       background: #181f2f;
       color: var(--white);
-      border-radius: 100px;
+      // Speech bubble: rounded on three corners, tail at bottom-right
+      border-radius: 20px 20px 4px 20px;
       font-weight: bold;
       display: flex;
       align-items: center;
-      width: initial;
+      justify-content: center;
+      width: 52px;
+      height: 48px;
+      position: relative;
+
+      // Triangular tail pointing down-right
+      &::after {
+        content: '';
+        position: absolute;
+        bottom: -9px;
+        right: -1px;
+        border-width: 9px 0 0 9px;
+        border-style: solid;
+        border-color: #181f2f transparent transparent transparent;
+      }
 
       svg {
         fill: var(--white);
@@ -974,54 +989,51 @@ $height: 582px;
       }
     }
 
-    .cc-reply-header {
-      display: flex;
-      align-items: center;
-      font-size: 11px;
-      color: #8e8e8e;
-      margin-bottom: 4px;
-      padding: 0 10px;
-
-      i {
-        font-size: 10px;
-        margin-right: 5px;
-        transform: scaleX(-1);
-      }
-
-      &.is-me {
-        justify-content: flex-end;
-      }
-    }
-
     .message-bubble {
       &.has-reply {
-        padding-top: 0 !important;
+        padding: 0 !important;
         overflow: hidden;
       }
 
+      .cc-reply-header {
+        display: flex;
+        align-items: center;
+        font-size: 11px;
+        color: rgba(255,255,255,0.75);
+        padding: 6px 10px 2px 10px;
+
+        i {
+          font-size: 10px;
+          margin-right: 5px;
+          transform: scaleX(-1);
+        }
+      }
+
       .cc-nested-reply-quote {
-        background: rgba(0, 0, 0, 0.05);
-        padding: 6px 12px;
-        margin: 0;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        background: rgba(0, 0, 0, 0.12);
+        padding: 6px 10px;
+        margin: 0 8px 4px 8px;
+        border-radius: 6px;
+        border-left: 3px solid rgba(255,255,255,0.5);
         cursor: pointer;
         transition: background 0.2s;
 
         &:hover {
-          background: rgba(0, 0, 0, 0.08);
+          background: rgba(0, 0, 0, 0.18);
         }
 
         .cc-nested-reply-text {
           font-size: 11px;
-          opacity: 0.8;
+          opacity: 0.85;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          color: inherit;
         }
       }
 
       .cc-bubble-main-text {
-        padding: 8px 12px;
+        padding: 6px 10px 8px 10px;
       }
     }
   }
@@ -2007,17 +2019,63 @@ $height: 582px;
 
 .chat-navbar-icon {
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  position: relative;
+
+  .chat-nav-link {
+    display: flex;
+    align-items: center;
+    padding: 4px;
+    border-radius: 10px;
+    text-decoration: none !important;
+    background: transparent;
+
+    &:hover .chat-nav-icon-wrap {
+      background: var(--gray-300, #d1d5db);
+    }
+
+    .chat-nav-icon-wrap {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--gray-200, #e5e7eb);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s ease;
+
+      img {
+        display: block;
+        flex-shrink: 0;
+      }
+    }
+  }
 
   .badge {
     background: var(--red-avatar-color);
-    color: var(--bg-color);
-    position: relative;
-    top: -10px;
-    left: -10px;
+    color: #fff;
+    position: absolute;
+    top: 0px;
+    right: 0px;
     border-radius: 50%;
     font-size: 9px;
-    border: 1px solid var(--red-avatar-color);
+    min-width: 16px;
+    height: 16px;
+    line-height: 16px;
+    text-align: center;
+    padding: 0 3px;
+    pointer-events: none;
+
+    &:empty {
+      display: none;
+    }
   }
+}
+
+.chat-desktop-icon-container,
+.desktop-icon[data-id="Messages"] .icon-container {
+  background: var(--surface-gray-3, #e5e7eb) !important;
 }
 
 .whatsapp-wrapper {
@@ -3471,6 +3529,19 @@ $height: 582px;
   max-width: 100%;
 }
 
+.cc-message-wrapper.recipient-message .message-bubble.has-reply {
+  .cc-reply-header {
+    color: #65676b;
+  }
+  .cc-nested-reply-quote {
+    background: rgba(0, 0, 0, 0.06);
+    border-left-color: #65676b;
+    .cc-nested-reply-text {
+      color: #050505;
+    }
+  }
+}
+
 .cc-message-wrapper.recipient-message .cc-replied-message {
   background: rgba(255, 255, 255, 0.96);
   border-left-color: #b46f1f;
@@ -3584,7 +3655,7 @@ $height: 582px;
 
 .message-section {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   padding: 8px 12px;
   gap: 8px;
   background: transparent;
@@ -3608,7 +3679,7 @@ $height: 582px;
   flex: 1;
   display: flex;
   flex-direction: row;
-  align-items: flex-end;
+  align-items: center;
   gap: 0;
   min-height: unset;
   padding: 0;
@@ -3618,7 +3689,7 @@ $height: 582px;
 
 .cc-composer-main {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   width: 100%;
   flex: 1;
@@ -3632,7 +3703,7 @@ $height: 582px;
   border-radius: 20px;
   padding: 2px 4px 2px 0;
   display: flex;
-  align-items: flex-end; /* keep emoji icon anchored to bottom on multi-line */
+  align-items: center;
   box-shadow: none;
   overflow: visible;
 }
@@ -3901,6 +3972,17 @@ $height: 582px;
     .mentioned-doctype-section {
       width: 100% !important;
     }
+
+    // Hide floating-window controls (collapse/close/platform-icon) that don't apply here
+    .collapse-chat-window,
+    .close-chat-window {
+      display: none !important;
+    }
+
+    .chat-header > svg.icon,
+    .chat-header > img {
+      display: none !important;
+    }
   }
 
   // ── empty / placeholder state ─────────────────────────────────────────
@@ -3936,4 +4018,99 @@ $height: 582px;
 
 [data-theme="dark"] .cc-attach-action:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+// ── Chat image size cap ───────────────────────────────────────────────────
+.chat-image {
+  max-width: 260px;
+  max-height: 260px;
+  width: auto;
+  height: auto;
+  display: block;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+// Remove the colored bubble when a message contains only an image
+.cc-message-wrapper.sender-message .message-bubble:has(.chat-image),
+.cc-message-wrapper.recipient-message .message-bubble:has(.chat-image) {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  padding: 2px !important;
+  color: inherit !important;
+}
+
+// ── Messenger overlay (Facebook Messenger-style popup) ─────────────────────
+.chat-messenger-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .chat-messenger-dialog {
+    background: var(--card-bg);
+    border-radius: 12px;
+    width: 90vw;
+    max-width: 1100px;
+    height: 82vh;
+    max-height: 720px;
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  }
+
+  .chat-messenger-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    background: var(--card-bg);
+  }
+
+  .chat-messenger-dialog-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .chat-messenger-dialog-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    line-height: 1;
+    display: flex;
+    align-items: center;
+
+    &:hover {
+      background: var(--bg-light-gray);
+      color: var(--text-color);
+    }
+  }
+
+  // Override the page-specific sizing so it fills the dialog panel
+  .chat-messenger-dialog-body.chat-messenger-page {
+    flex: 1;
+    height: 100% !important;
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
 }

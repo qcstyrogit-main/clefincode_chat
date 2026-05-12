@@ -7,18 +7,17 @@ export default class ChatBubble {
 
   setup() {
     this.$chat_bubble = $(document.createElement("div"));
-    let chat_icon = `<img title="Start Chat" src="/assets/clefincode_chat/icons/clefincode_chat.svg" width="50px" height="50px">`;
+    let chat_icon = `<img title="Start Chat" src="/assets/clefincode_chat/icons/clefincode_chat.svg" width="32px" height="32px">`;
     this.open_title = this.parent.is_admin ? __("Show Chats") : chat_icon;
     this.closed_title = __("Close Chat");
 
-    const bubble_visible = this.parent.is_desk === true ? "d-none" : "";
     this.open_inner_html = `
-              <div class='p-3 chat-bubble ${bubble_visible}'>                  
+              <div class='p-2 chat-bubble'>
                   <div>${this.open_title}</div>
               </div>
           `;
     this.closed_inner_html = `
-          <div class='chat-bubble-closed chat-bubble ${bubble_visible}'>
+          <div class='chat-bubble-closed chat-bubble'>
               <span class='cross-icon'>
               <img title="Start Chat" src="/assets/clefincode_chat/icons/close.svg"  width="25px" height="25px">
               </span>
@@ -34,15 +33,19 @@ export default class ChatBubble {
 
   render() {
     this.parent.$chat_right_section.append(this.$chat_bubble);
+    // On desk the navbar Messages button is used — hide the floating bubble
+    if (this.parent.is_desk) {
+      this.$chat_bubble.hide();
+    }
     this.setup_events();
   }
 
   disk_chat_icon(){
-    if (this.parent.chat_list && this.parent.chat_list.is_open == true) {
-      return;
+    if (this.parent.is_open) {
+      this.parent.hide_chat_widget();
+    } else {
+      this.parent.show_chat_widget();
     }
-    this.parent.is_open = !this.parent.is_open;
-    this.parent.show_chat_widget();
   }
 
   portal_chat_icon() { 
@@ -71,8 +74,14 @@ export default class ChatBubble {
 
   setup_events() {
     const me = this;
-    $("#chat-bubble, .chat-cross-button").on("click", () => {
-      me.portal_chat_icon();
-    });
+    if (this.parent.is_desk) {
+      $("#chat-bubble").on("click", () => {
+        me.disk_chat_icon();
+      });
+    } else {
+      $("#chat-bubble, .chat-cross-button").on("click", () => {
+        me.portal_chat_icon();
+      });
+    }
   }
 }

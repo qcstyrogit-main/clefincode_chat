@@ -65,6 +65,28 @@ export default class TypeMessageInput {
         // we just need to ensure sync_height is called if needed, but it's handled by 'input'
       }
     });
+
+    this.$input.on("paste", (e) => {
+      const clipboard = e.originalEvent.clipboardData;
+      if (!clipboard || !clipboard.items) return;
+
+      for (const item of clipboard.items) {
+        if (!item.type.startsWith("image/")) continue;
+
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (!blob) return;
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const ext = item.type.split("/")[1] || "png";
+        const file = new File([blob], `pasted-image-${timestamp}.${ext}`, { type: item.type });
+
+        if (me.chat_space && me.chat_space.handle_upload_file) {
+          me.chat_space.handle_upload_file({ file_obj: file });
+        }
+        return; // handle one image per paste
+      }
+    });
   }
 
   sync_height() {

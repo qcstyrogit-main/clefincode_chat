@@ -1,0 +1,29 @@
+{
+ "app": "clefincode_chat",
+ "creation": "2026-05-12 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Workspace Sidebar",
+ "idx": 0,
+ "items": [
+  {
+   "child": 0,
+   "collapsible": 0,
+   "icon": "small-message",
+   "indent": 0,
+   "keep_closed": 0,
+   "display_depends_on": "eval:frappe.session.user !== \"Administrator\"",
+   "label": "Chat",
+   "link_to": "clefincode-chat",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-05-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ClefinCode Chat",
+ "name": "ClefinCode Chat",
+ "owner": "Administrator",
+ "standard": 1,
+ "title": "ClefinCode Chat"
+}

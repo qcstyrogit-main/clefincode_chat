@@ -758,10 +758,13 @@ export default class ChatSpace {
       const emoji = $(this).data("emoji");
       const message_name = $(this).closest(".cc-message-wrapper").data("message-name");
       const room = me.profile.room_type === "Contributor" ? me.profile.parent_channel : me.profile.room;
-      
+
       frappe.call({
         method: "clefincode_chat.api.api_1_2_1.api.toggle_message_reaction",
         args: { message_name, emoji, user_email: me.profile.user_email, room }
+      }).then((r) => {
+        const reactions = r && r.message && r.message.results && r.message.results[0] && r.message.results[0].reactions;
+        if (reactions) me.update_message_reactions(message_name, reactions);
       });
     });
 
@@ -952,6 +955,9 @@ export default class ChatSpace {
       frappe.call({
         method: "clefincode_chat.api.api_1_2_1.api.toggle_message_reaction",
         args: { message_name, emoji, user_email: me.profile.user_email, room }
+      }).then((r) => {
+        const reactions = r && r.message && r.message.results && r.message.results[0] && r.message.results[0].reactions;
+        if (reactions) me.update_message_reactions(message_name, reactions);
       });
       console.groupEnd();
     });
@@ -971,6 +977,9 @@ export default class ChatSpace {
         frappe.call({
           method: "clefincode_chat.api.api_1_2_1.api.toggle_message_reaction",
           args: { message_name, emoji, user_email: me.profile.user_email, room }
+        }).then((r) => {
+          const reactions = r && r.message && r.message.results && r.message.results[0] && r.message.results[0].reactions;
+          if (reactions) me.update_message_reactions(message_name, reactions);
         });
       }
       $palette.removeClass("active");
@@ -1314,69 +1323,41 @@ export default class ChatSpace {
   }
 
   upload_file(file) {
-    const me = this;        
+    const me = this;
 
     return new Promise((resolve, reject) => {
       show_overlay("Uploading...");
-      let xhr = new XMLHttpRequest();
 
-      xhr.upload.addEventListener('load', () => {        
-        resolve();
-      });
-
-      xhr.addEventListener('error', () => {
-        hide_overlay();
-        reject(frappe.throw(__('Internal Server Error')));
-      });
-      xhr.onreadystatechange = () => {
-        if (xhr.readyState == XMLHttpRequest.DONE) {
-          if (xhr.status === 200) {
-            let r = null;
-            let file_doc = null;
-            try {
-              r = JSON.parse(xhr.responseText);
-              if (r.message.doctype === 'File') {
-                file_doc = r.message;
-              }
-            } catch (e) {
-              r = xhr.responseText;
-            }
-            try {
-              if (file_doc === null) {
-                hide_overlay();
-                reject(frappe.throw(__('File upload failed!')));
-              }              
-              me.handle_send_message(file_doc.file_url, file_doc.file_name, file_doc.name);
-            } catch (error) {
-              console.log(error)
-            }
-          } else {
-            try {
-              const error = JSON.parse(xhr.responseText);
-              const messages = JSON.parse(error._server_messages);
-              const errorObj = JSON.parse(messages[0]);
-              hide_overlay();
-              reject(frappe.throw(__(errorObj.message)));
-            } catch (e) {
-              console.log(e)
-            }
-          }
-        }
-      };
-
-      xhr.open('POST', '/api/method/upload_file', true);
-      xhr.setRequestHeader('Accept', 'application/json');
-      xhr.setRequestHeader('X-Frappe-CSRF-Token', frappe.csrf_token);
-
-      let form_data = new FormData();
-
+      const form_data = new FormData();
       form_data.append('file', file.file_obj, file.name);
-      form_data.append('is_private', +false);
 
-      form_data.append('doctype', 'ClefinCode Chat Message');
-      form_data.append('docname', this.profile.room);
-      form_data.append('optimize', +true);
-      xhr.send(form_data);
+      fetch('/api/method/clefincode_chat.api.api_1_3_1.api.upload_chat_file', {
+        method: 'POST',
+        headers: {
+          'X-Frappe-CSRF-Token': frappe.csrf_token,
+          'Accept': 'application/json',
+        },
+        body: form_data,
+      })
+        .then((res) => res.json())
+        .then((r) => {
+          const file_doc = r && r.message;
+          if (!file_doc || !file_doc.file_url) {
+            hide_overlay();
+            reject(new Error(__('File upload failed!')));
+            frappe.msgprint(__('File upload failed!'));
+            return;
+          }
+          resolve();
+          me.handle_send_message(file_doc.file_url, file_doc.file_name, file_doc.name)
+            .catch((err) => { hide_overlay(); console.error("File send error:", err); });
+        })
+        .catch((err) => {
+          hide_overlay();
+          console.error("Upload error:", err);
+          frappe.msgprint(__('File upload failed. Please try again.'));
+          reject(err);
+        });
     });
   }
 
@@ -1745,14 +1726,10 @@ export default class ChatSpace {
       const is_sender = type === "sender-message";
       const actions_html = is_sender 
         ? `<div class="cc-message-hover-actions">
-            <button class="cc-more-trigger" title="More"><i class="fa fa-ellipsis-v"></i></button>
-            <button class="cc-reply-trigger" title="Reply"><i class="fa fa-reply"></i></button>
-            <button class="cc-reaction-trigger" title="Add reaction" data-message="${message_name}"><i class="fa fa-smile-o"></i></button>
+            <button class="cc-reaction-trigger" data-message="${message_name}"><i class="fa fa-smile-o"></i></button>
           </div>`
         : `<div class="cc-message-hover-actions">
-            <button class="cc-reaction-trigger" title="Add reaction" data-message="${message_name}"><i class="fa fa-smile-o"></i></button>
-            <button class="cc-reply-trigger" title="Reply"><i class="fa fa-reply"></i></button>
-            <button class="cc-more-trigger" title="More"><i class="fa fa-ellipsis-v"></i></button>
+            <button class="cc-reaction-trigger" data-message="${message_name}"><i class="fa fa-smile-o"></i></button>
           </div>`;
       const $actions_bar = $(actions_html);
       $recipient_element.append($actions_bar);
@@ -1814,11 +1791,8 @@ export default class ChatSpace {
       `;
     }
 
-    if (reply_header_html) {
-      $recipient_element.append(reply_header_html);
-    }
-
-    if (nested_reply_html) {
+    if (r_user && (r_text || r_target)) {
+      $message_element.append(reply_header_html);
       $message_element.append(nested_reply_html);
       $message_element.addClass("has-reply");
     }
@@ -2303,6 +2277,11 @@ export default class ChatSpace {
     }
     // ================= End Handling with Mentions ===========================
 
+    // handle_attachment returns a jQuery element; convert to HTML string before sending
+    if (content && typeof content === "object" && content.prop) {
+      content = content.prop("outerHTML") || "";
+    }
+
     const message_info = {
       content: content,
       user: this.profile.user,
@@ -2324,6 +2303,40 @@ export default class ChatSpace {
       ...reply_message,
     };
     this.last_chat_space_message = await send_message(message_info);
+
+    // Optimistic render: show sent message immediately without waiting for socket.io
+    if (this.last_chat_space_message) {
+      const send_date = frappe.datetime.now_datetime();
+      this._locally_rendered_messages = this._locally_rendered_messages || new Set();
+      this._locally_rendered_messages.add(this.last_chat_space_message);
+      await this.receive_message(
+        {
+          content: content,
+          sender_email: this.profile.user_email,
+          user: this.profile.user,
+          message_name: this.last_chat_space_message,
+          send_date: send_date,
+          message_type: "",
+          message_template_type: "",
+          reply_to: reply_message.reply_to || null,
+          replied_message_sender: reply_message.replied_message_sender || null,
+          replied_message_content: reply_message.replied_message_content || null,
+        },
+        get_time(send_date, this.profile.time_zone)
+      );
+    }
+
+    // Clear typing state immediately so the indicator disappears for the recipient
+    if (this.typingTimeout) {
+      clearTimeout(this.typingTimeout);
+      this.typingTimeout = null;
+    }
+    this.isTypingIndicatorActive = false;
+    const _typing_room = this.profile.room_type === "Contributor"
+      ? this.profile.parent_channel : this.profile.room;
+    if (_typing_room) {
+      this.callSetTypingAPI(this.profile.user_email, _typing_room, "false");
+    }
 
     // Clear reply state
     this.reply_to_message = null;
@@ -2882,6 +2895,10 @@ export default class ChatSpace {
           me.draw_clip_in_canvas("/private/files/" + file_name, element);
         }, 500);
       }
+      // Remove typing indicator for this sender now that their message arrived
+      this._removeTypingBubble(res.sender_email);
+      if (this._active_typing_users) this._active_typing_users.delete(res.sender_email);
+
       this.$chat_space_container.append(message_content);
       scroll_to_bottom(this.$chat_space_container);
     }
@@ -2984,7 +3001,11 @@ export default class ChatSpace {
         ) {
           mark_messsages_as_read(me.profile.user_email, me.profile.room);
         }
-        me.receive_message(res, get_time(res.send_date, me.profile.time_zone));
+        if (me._locally_rendered_messages && me._locally_rendered_messages.has(res.message_name)) {
+          me._locally_rendered_messages.delete(res.message_name);
+        } else {
+          me.receive_message(res, get_time(res.send_date, me.profile.time_zone));
+        }
       } else if (res.realtime_type == "add_group_member") {
         if (
           res.added_user_email.some(
@@ -3128,6 +3149,185 @@ export default class ChatSpace {
         me.chat_topic_status = res.chat_topic_status;
       }
     });
+
+    this.start_message_polling();
+    this.start_typing_polling();
+    this.start_reaction_polling();
+  }
+
+  start_reaction_polling() {
+    if (this._reaction_polling_interval) {
+      clearInterval(this._reaction_polling_interval);
+    }
+    const me = this;
+    me._reaction_poll_since = new Date(Date.now() - 5000).toISOString().replace("T", " ").split(".")[0];
+
+    me._reaction_polling_interval = setInterval(() => {
+      if (!me.profile.room || !me.$chat_space_container) return;
+
+      const poll_room = me.profile.room_type === "Contributor" && me.last_active_sub_channel
+        ? me.last_active_sub_channel : me.profile.room;
+
+      const params = new URLSearchParams({
+        room: poll_room,
+        user_email: me.profile.user_email,
+        since: me._reaction_poll_since,
+      });
+
+      fetch("/api/method/clefincode_chat.api.api_1_2_1.api.get_reaction_updates", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Frappe-CSRF-Token": frappe.csrf_token,
+          "Accept": "application/json",
+        },
+        body: params,
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          const updates = (data && data.message && data.message.updates) || [];
+          for (const update of updates) {
+            me.update_message_reactions(update.message_name, update.reactions);
+            if (update.timestamp > me._reaction_poll_since) {
+              me._reaction_poll_since = update.timestamp;
+            }
+          }
+        })
+        .catch(() => {});
+    }, 3000);
+  }
+
+  start_typing_polling() {
+    if (this._typing_polling_interval) {
+      clearInterval(this._typing_polling_interval);
+    }
+    const me = this;
+    me._active_typing_users = new Set();
+
+    me._typing_polling_interval = setInterval(() => {
+      if (!me.profile.room || !me.$chat_space_container) return;
+
+      const poll_room = me.profile.room_type === "Contributor" && me.last_active_sub_channel
+        ? me.last_active_sub_channel : me.profile.room;
+
+      const params = new URLSearchParams({
+        room: poll_room,
+        user_email: me.profile.user_email,
+      });
+
+      fetch("/api/method/clefincode_chat.api.api_1_3_1.api.get_typing_state", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Frappe-CSRF-Token": frappe.csrf_token,
+          "Accept": "application/json",
+        },
+        body: params,
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          const typers = (data && data.message && data.message.typers) || [];
+          const current_typer_emails = new Set(typers.map((t) => t.user));
+
+          // Show new typers
+          for (const typer of typers) {
+            if (!me._active_typing_users.has(typer.user)) {
+              me.showTypingIndicator(typer.first_name, 0, typer.user);
+            }
+          }
+          // Hide typers who stopped
+          for (const old_user of me._active_typing_users) {
+            if (!current_typer_emails.has(old_user)) {
+              me._removeTypingBubble(old_user);
+            }
+          }
+          me._active_typing_users = current_typer_emails;
+        })
+        .catch(() => {});
+    }, 1500);
+  }
+
+  start_message_polling() {
+    if (this._polling_interval) {
+      clearInterval(this._polling_interval);
+    }
+    const me = this;
+    // Use UTC as the starting filter date (5s buffer to avoid missing in-flight msgs)
+    me._poll_from_date = new Date(Date.now() - 5000).toISOString().replace("T", " ").split(".")[0];
+    me._poll_in_progress = false;
+
+    me._polling_interval = setInterval(() => {
+      if (me._poll_in_progress || !me.profile.room || !me.$chat_space_container) return;
+      me._poll_in_progress = true;
+
+      const poll_room = me.profile.room_type === "Contributor" && me.last_active_sub_channel
+        ? me.last_active_sub_channel : me.profile.room;
+
+      const params = new URLSearchParams({
+        room: poll_room,
+        user_email: me.profile.user_email,
+        room_type: me.profile.room_type,
+        lastmessagedate: me._poll_from_date,
+        cmd: "clefincode_chat.api.api_1_3_1.api.get_messages_latest",
+      });
+
+      fetch("/api/method/clefincode_chat.api.api_1_3_1.api.get_messages_latest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Frappe-CSRF-Token": frappe.csrf_token,
+          "Accept": "application/json",
+        },
+        body: params,
+      })
+        .then((res) => res.json())
+        .then(async (r) => {
+          const messages = r && r.message && r.message.results;
+          if (!messages || !messages.length) return;
+          for (const msg of messages) {
+            if (!me.$chat_space_container) break;
+            if (me.$chat_space_container.find(`[data-message-name="${msg.message_name}"]`).length) {
+              if (msg.utc_message_date) me._poll_from_date = msg.utc_message_date;
+              continue;
+            }
+            await me.receive_message(
+              {
+                content: msg.content,
+                sender_email: msg.sender_email,
+                user: msg.sender,
+                message_name: msg.message_name,
+                send_date: msg.send_date,
+                message_type: msg.message_type || "",
+                message_template_type: msg.message_template_type || "",
+                reply_to: null,
+                replied_message_sender: null,
+                replied_message_content: null,
+              },
+              get_time(msg.send_date, me.profile.time_zone)
+            );
+            if (msg.utc_message_date) me._poll_from_date = msg.utc_message_date;
+          }
+        })
+        .catch((err) => console.error("[CC Poll]", err))
+        .finally(() => {
+          me._poll_in_progress = false;
+        });
+    }, 3000);
+  }
+
+  stop_message_polling() {
+    if (this._polling_interval) {
+      clearInterval(this._polling_interval);
+      this._polling_interval = null;
+    }
+    if (this._typing_polling_interval) {
+      clearInterval(this._typing_polling_interval);
+      this._typing_polling_interval = null;
+    }
+    if (this._reaction_polling_interval) {
+      clearInterval(this._reaction_polling_interval);
+      this._reaction_polling_interval = null;
+    }
   }
 
   async get_last_active_sub_channel() {
@@ -3360,16 +3560,34 @@ async setupTypingIndicator(textValue) {
   }
 
   showTypingIndicator(user, mobile_app, user_email) {
-    const statusDiv = this.$chat_space.find(".chat-profile-status");
-    statusDiv.text(`${user} is typing...`);
-    if (!mobile_app) {
-      if (this.showTypingIndicatorTimeout) {
-        clearTimeout(this.showTypingIndicatorTimeout);
-        this.showTypingIndicatorTimeout = null;
-      }
-      this.showTypingIndicatorTimeout = setTimeout(() => {
-        this.hideTypingIndicator(user_email);
-      }, 3000);
+    if (!this.$chat_space_container) return;
+    // Remove existing indicator for this user
+    this.$chat_space_container.find(`.cc-typing-indicator[data-typing-user="${user_email}"]`).remove();
+    const bubble_html = `
+      <div class="cc-typing-indicator" data-typing-user="${user_email}">
+        <div class="cc-typing-bubble">
+          <span></span><span></span><span></span>
+        </div>
+      </div>`;
+    this.$chat_space_container.append(bubble_html);
+    this.$chat_space_container.animate(
+      { scrollTop: this.$chat_space_container.prop("scrollHeight") }, "fast"
+    );
+    // Auto-hide as fallback if polling / socket.io doesn't fire the hide
+    if (this.showTypingIndicatorTimeout) {
+      clearTimeout(this.showTypingIndicatorTimeout);
+    }
+    this.showTypingIndicatorTimeout = setTimeout(() => {
+      this._removeTypingBubble(user_email);
+    }, 5000);
+  }
+
+  _removeTypingBubble(user_email) {
+    if (!this.$chat_space_container) return;
+    if (user_email) {
+      this.$chat_space_container.find(`.cc-typing-indicator[data-typing-user="${user_email}"]`).remove();
+    } else {
+      this.$chat_space_container.find(".cc-typing-indicator").remove();
     }
   }
 showTemplateSuggestions(res) {
@@ -3521,29 +3739,7 @@ insertTemplateText (text) {
   }
 };
   async hideTypingIndicator(user_email) {
-    if (this.profile.room_type == "Direct") {
-      if (user_email && this.profile.contact == user_email) {
-        this.set_online();
-      } else {
-        const last_active_value = await get_last_active(
-          this.profile.contact,
-          this.profile.user_email
-        );
-        if (last_active_value) {
-          const last_active =
-            get_date_from_now(
-              last_active_value,
-              "space",
-              this.profile.time_zone
-            ) +
-            " " +
-            get_time(last_active_value, this.profile.time_zone);
-          this.$chat_space.find(".chat-profile-status").text(last_active);
-        }
-      }
-    } else {
-      this.$chat_space.find(".chat-profile-status").text(``);
-    }
+    this._removeTypingBubble(user_email);
   }
 
   render_mentioned_doctype_section(docname) {

@@ -15,9 +15,11 @@ def ensure_contact_custom_fields():
 
 def after_install():
     ensure_contact_custom_fields()
-    create_roles()   
+    create_roles()
     create_users_profiles()
     install_ffmpeg()
+    from clefincode_chat.setup.after_migrate import create_messages_desktop_icon
+    create_messages_desktop_icon()
 # =================================================================================
 def create_roles():
     if not frappe.db.exists("Role", "Chat Support"):

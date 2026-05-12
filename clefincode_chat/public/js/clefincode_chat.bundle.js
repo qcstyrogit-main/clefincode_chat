@@ -35,7 +35,9 @@ frappe.ErpnextChat = class {
           );
         }
       }
-    } else await this.create_app();
+    } else {
+      await this.create_app();
+    }
 
     frappe.socketio.init(res.socketio_port);
 
@@ -234,23 +236,54 @@ frappe.ErpnextChat = class {
 
     this.chat_bubble = new ChatBubble(this);
     this.chat_bubble.render();
-    $("#chat-bubble").append(
-      '<span class="badge" id="chat-notification-count"></span>'
-    );
-
-    const navbar_icon_html = `
-        <li class='nav-item dropdown dropdown-notifications 
-        dropdown-mobile chat-navbar-icon' title="Show Chats" >
-          <img title="Show Chats" src="/assets/clefincode_chat/icons/clefincode_chat.svg" width="25px" height="25px">
-        <span class="badge" id="chat-notification-count"></span>
-        </li>
-    `;
 
     if (this.is_desk === true) {
-      $("header.navbar > .container > .navbar-collapse > ul").prepend(
-        navbar_icon_html
+      // Inject the Messages button into the Frappe top navbar.
+      // Use event + immediate attempt to handle toolbar timing.
+      const navbar_icon_html = `
+        <li class='nav-item dropdown-mobile chat-navbar-icon'>
+          <a class="btn chat-nav-link" href="#">
+            <div class="chat-nav-icon-wrap">
+              <img src="/assets/clefincode_chat/icons/clefincode_chat.svg" width="20px" height="20px">
+            </div>
+          </a>
+          <span class="badge" id="chat-notification-count"></span>
+        </li>`;
+
+      const inject = () => {
+        if ($(".chat-navbar-icon").length) return; // already injected
+        const $target = $(".navbar-right");
+        if ($target.length) {
+          $target.prepend(navbar_icon_html);
+          // Bootstrap tooltip — same style as Frappe workspace shortcut hover labels
+          $(".chat-navbar-icon").tooltip({
+            title: __("Messages"),
+            placement: "bottom",
+            trigger: "hover",
+          });
+          this.chat_bubble.$chat_bubble.hide();
+        }
+      };
+
+      // Try immediately (toolbar may already be ready)
+      inject();
+      // Also hook the toolbar_setup event for cases where toolbar loads after us
+      $(document).on("toolbar_setup", inject);
+      // Last-resort fallback after a short delay
+      setTimeout(inject, 1000);
+
+      // If nothing was injected, keep bubble + badge as fallback
+      if (!$(".chat-navbar-icon").length) {
+        $("#chat-bubble").append(
+          '<span class="badge" id="chat-notification-count"></span>'
+        );
+      }
+    } else {
+      $("#chat-bubble").append(
+        '<span class="badge" id="chat-notification-count"></span>'
       );
     }
+
     this.setup_events();
   }
 
@@ -364,10 +397,100 @@ frappe.ErpnextChat = class {
   }
 
   setup_events() {
-    const me = this;
-    $(".chat-navbar-icon").on("click", function () {
-      me.chat_bubble.disk_chat_icon();
+    $(document).on("click", ".chat-nav-link", (e) => {
+      e.preventDefault();
+      frappe.set_route("clefincode-chat");
     });
+    document.addEventListener("click", (e) => {
+      const icon = e.target.closest('.desktop-icon[data-id="Messages"]');
+      if (icon) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        frappe.set_route("clefincode-chat");
+      }
+    }, true);
+  }
+
+  show_messenger_overlay() {
+    if ($("#chat-messenger-overlay").length) return;
+
+    if (!this.res || !this.res.is_admin) {
+      frappe.msgprint(__("Chat messenger is not available for your account."));
+      return;
+    }
+
+    const $overlay = $(`
+      <div class="chat-messenger-overlay" id="chat-messenger-overlay">
+        <div class="chat-messenger-dialog">
+          <div class="chat-messenger-dialog-header">
+            <div class="chat-messenger-dialog-title">
+              <img src="/assets/clefincode_chat/icons/clefincode_chat.svg" width="20" height="20">
+              ${__("Messages")}
+            </div>
+            <button class="chat-messenger-dialog-close" title="${__("Close")}">
+              ${frappe.utils.icon("close", "sm")}
+            </button>
+          </div>
+          <div class="chat-messenger-dialog-body chat-messenger-page">
+            <div class="chat-messenger-sidebar" id="chat-overlay-sidebar"></div>
+            <div class="chat-messenger-content" id="chat-overlay-content">
+              <div class="chat-messenger-placeholder">
+                <svg class="icon icon-2xl"><use href="#icon-small-message"></use></svg>
+                <p>${__("Select a conversation to start chatting")}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+
+    $("body").append($overlay);
+
+    $overlay.find(".chat-messenger-dialog-close").on("click", () => {
+      this.close_messenger_overlay();
+    });
+
+    $overlay.on("click", (e) => {
+      if ($(e.target).is("#chat-messenger-overlay")) {
+        this.close_messenger_overlay();
+      }
+    });
+
+    $(document).one("keydown.messenger_overlay", (e) => {
+      if (e.key === "Escape") this.close_messenger_overlay();
+    });
+
+    const $sidebar = $("#chat-overlay-sidebar");
+    const $content = $("#chat-overlay-content");
+    let active_chat_space = null;
+
+    const chat_list = new frappe.ClefinCodeChat.ChatList({
+      $wrapper: $sidebar,
+      user: this.res.user,
+      user_email: this.res.user_email,
+      is_admin: this.res.is_admin,
+      time_zone: this.res.time_zone,
+      user_type: this.res.user_type,
+      is_limited_user: this.res.is_limited_user,
+      on_room_open: (profile, $chat_room, chat_status) => {
+        $sidebar.find(".chat-room").removeClass("chat-room-active");
+        $chat_room.addClass("chat-room-active");
+        $content.empty();
+        if (active_chat_space) active_chat_space.is_open = 0;
+        active_chat_space = new frappe.ClefinCodeChat.ChatSpace({
+          $wrapper: $content,
+          profile: profile,
+          $chat_room: $chat_room,
+          chat_status: chat_status,
+        });
+      },
+    });
+    chat_list.render();
+  }
+
+  close_messenger_overlay() {
+    $(document).off("keydown.messenger_overlay");
+    $("#chat-messenger-overlay").remove();
   }
 
   setup_socketio() {

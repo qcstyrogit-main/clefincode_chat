@@ -1,0 +1,16 @@
+[
+  {
+    "doctype": "Desktop Icon",
+    "name": "Messages",
+    "label": "Messages",
+    "app": "clefincode_chat",
+    "standard": 1,
+    "hidden": 0,
+    "restrict_removal": 0,
+    "bg_color": "gray",
+    "logo_url": "/assets/clefincode_chat/icons/clefincode_chat.svg",
+    "icon_type": "Link",
+    "link_type": "Workspace Sidebar",
+    "idx": 0
+  }
+]

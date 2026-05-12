@@ -85,7 +85,8 @@ after_install = "clefincode_chat.setup.install.after_install"
 after_migrate  = "clefincode_chat.setup.after_migrate.after_migrate"
 
 fixtures = [
-    {"dt": "Workspace", "filters": [["name", "in", ["ClefinCode Chat"]]]}
+    {"dt": "Workspace", "filters": [["name", "in", ["ClefinCode Chat"]]]},
+    {"dt": "Workspace Sidebar", "filters": [["name", "in", ["ClefinCode Chat"]]]}
 ]
 # Uninstallation
 # ------------
