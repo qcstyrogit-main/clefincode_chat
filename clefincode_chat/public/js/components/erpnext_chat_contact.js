@@ -676,19 +676,9 @@ handle_chat_contact_click() {
 
   open_chat_space(contact, platform, room = null, room_type = "Direct", new_member = null, room_status) {
     this.chat_status = room_status;
+
     if (room) {
-      if (check_if_chat_window_open(room, "room")) {
-        $(".expand-chat-window[data-id|='" + contact + "']").click();
-        return;
-      }
-
-      this.chat_window = new ChatWindow({
-        profile: {
-          room: room,
-        },
-      });
-
-      let profile = {
+      const profile = {
         is_admin: this.profile.is_admin,
         user: this.profile.user,
         user_email: this.profile.user_email,
@@ -699,28 +689,28 @@ handle_chat_contact_click() {
         contact: contact,
         is_first_message: 0,
         platform: platform,
-        new_member: new_member
+        new_member: new_member,
       };
 
+      if (window.clefincode_messenger_page) {
+        window.clefincode_messenger_page.open_contact_chat(profile, this.chat_status);
+        return;
+      }
 
-      this.chat_space = new ChatSpace({
-        $wrapper: this.chat_window.$chat_window,
-        profile: profile,
-        chat_status: this.chat_status
-      });
-
-    } else {
-      if (check_if_chat_window_open(contact, "contact")) {
+      if (check_if_chat_window_open(room, "room")) {
         $(".expand-chat-window[data-id|='" + contact + "']").click();
         return;
       }
-      this.chat_window = new ChatWindow({
-        profile: {
-          contact: contact,
-        },
+
+      this.chat_window = new ChatWindow({ profile: { room: room } });
+      this.chat_space = new ChatSpace({
+        $wrapper: this.chat_window.$chat_window,
+        profile: profile,
+        chat_status: this.chat_status,
       });
 
-      let profile = {
+    } else {
+      const profile = {
         is_admin: this.profile.is_admin,
         user: this.profile.user,
         user_email: this.profile.user_email,
@@ -732,6 +722,18 @@ handle_chat_contact_click() {
         is_first_message: 1,
         platform: platform,
       };
+
+      if (window.clefincode_messenger_page) {
+        window.clefincode_messenger_page.open_contact_chat(profile, this.chat_status);
+        return;
+      }
+
+      if (check_if_chat_window_open(contact, "contact")) {
+        $(".expand-chat-window[data-id|='" + contact + "']").click();
+        return;
+      }
+
+      this.chat_window = new ChatWindow({ profile: { contact: contact } });
       this.chat_space = new ChatSpace({
         $wrapper: this.chat_window.$chat_window,
         profile: profile,

@@ -275,6 +275,11 @@ export default class ChatRoom {
         return;
       }
 
+      if (window.clefincode_messenger_page) {
+        window.clefincode_messenger_page.open_room(me.profile, me.$chat_room, me.chat_status);
+        return;
+      }
+
       if (check_if_chat_window_open(me.profile.room, "room")) {
         $(".expand-chat-window[data-id|='" + me.profile.room + "']").click();
         return;

@@ -658,3 +658,4 @@ export default class EmojiPicker {
     $(document).off("click.emoji_picker keydown.emoji_picker");
   }
 }
+

@@ -90,7 +90,7 @@ class ClefinCodeMessengerPage {
 	open_room(profile, $chat_room, chat_status) {
 		// Highlight the selected room
 		this.$sidebar.find(".chat-room").removeClass("chat-room-active");
-		$chat_room.addClass("chat-room-active");
+		if ($chat_room) $chat_room.addClass("chat-room-active");
 
 		this.active_room = profile.room;
 		this.$content.empty();
@@ -105,5 +105,14 @@ class ClefinCodeMessengerPage {
 			$chat_room: $chat_room,
 			chat_status: chat_status,
 		});
+	}
+
+	open_contact_chat(profile, chat_status) {
+		let $chat_room = null;
+		if (profile.room) {
+			const $found = this.$sidebar.find(`.chat-room[data-room="${profile.room}"]`);
+			if ($found.length) $chat_room = $found;
+		}
+		this.open_room(profile, $chat_room, chat_status);
 	}
 }

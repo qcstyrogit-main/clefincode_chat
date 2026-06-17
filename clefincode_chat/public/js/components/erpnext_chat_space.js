@@ -699,15 +699,44 @@ export default class ChatSpace {
 
     this.$chat_space.on(
       "click",
-      ".cc-replied-message, .cc-inline-reply-quote",
+      ".cc-replied-message, .cc-inline-reply-quote, .cc-nested-reply-quote, .cc-reply-context, .cc-quoted-preview",
       function (e) {
-        const target = $(this).data("target");
+        const target = $(this).closest("[data-target]").data("target");
         if (!target) return;
         e.preventDefault();
         e.stopPropagation();
         scroll_to_message(target);
       }
     );
+
+    // Swipe-right on message to reply (mobile)
+    let swipe_start_x = 0;
+    let swipe_start_y = 0;
+    let $swipe_wrapper = null;
+    this.$chat_space.on("touchstart", ".cc-message-wrapper", function(e) {
+      swipe_start_x = e.originalEvent.touches[0].clientX;
+      swipe_start_y = e.originalEvent.touches[0].clientY;
+      $swipe_wrapper = $(this);
+    });
+    this.$chat_space.on("touchmove", ".cc-message-wrapper", function(e) {
+      if (!$swipe_wrapper) return;
+      const dx = e.originalEvent.touches[0].clientX - swipe_start_x;
+      const dy = e.originalEvent.touches[0].clientY - swipe_start_y;
+      if (Math.abs(dx) > Math.abs(dy) && dx > 0) {
+        const shift = Math.min(dx * 0.4, 60);
+        $swipe_wrapper.css("transform", `translateX(${shift}px)`);
+        e.preventDefault();
+      }
+    });
+    this.$chat_space.on("touchend", ".cc-message-wrapper", function(e) {
+      if (!$swipe_wrapper) return;
+      const dx = e.originalEvent.changedTouches[0].clientX - swipe_start_x;
+      $swipe_wrapper.css("transform", "");
+      if (dx > 60) {
+        $swipe_wrapper.find(".cc-reply-trigger").trigger("click");
+      }
+      $swipe_wrapper = null;
+    });
 
     this.$chat_space.on("click", ".cc-reply-close", function() {
       me.reply_to_message = null;
@@ -992,7 +1021,7 @@ export default class ChatSpace {
       const $palette = $("body > .cc-global-reaction-palette");
       const message_name = $palette.attr("data-active-message");
       const $original_btn = $palette.data("trigger-btn"); // Get original smiley button
-      
+
       if (!message_name || message_name === "undefined") return;
 
       // Hide the quick palette first
@@ -1721,17 +1750,15 @@ export default class ChatSpace {
       "message-bubble"
     );
 
-    // Messenger-style hover reaction trigger (Global Palette approach)
+    // Messenger-style hover actions (reaction + reply)
     if (type !== "info-message") {
-      const is_sender = type === "sender-message";
-      const actions_html = is_sender 
-        ? `<div class="cc-message-hover-actions">
-            <button class="cc-reaction-trigger" data-message="${message_name}"><i class="fa fa-smile-o"></i></button>
-          </div>`
-        : `<div class="cc-message-hover-actions">
-            <button class="cc-reaction-trigger" data-message="${message_name}"><i class="fa fa-smile-o"></i></button>
-          </div>`;
-      const $actions_bar = $(actions_html);
+      const reply_svg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>`;
+      const $actions_bar = $(`
+        <div class="cc-message-hover-actions">
+          <button class="cc-reaction-trigger" data-message="${message_name}"><i class="fa fa-smile-o"></i></button>
+          <button class="cc-reply-trigger" data-message="${message_name}">${reply_svg}</button>
+        </div>
+      `);
       $recipient_element.append($actions_bar);
     }
 
@@ -1751,50 +1778,51 @@ export default class ChatSpace {
       $recipient_element.prepend($avatar_container);
     }
 
-    const content_has_inline_reply =
-      typeof content === "string" && content.indexOf("cc-inline-reply-quote") !== -1;
-
-    // Handle Reply Structure (Messenger Style)
-    let reply_header_html = "";
-    let nested_reply_html = "";
-
     // Robust extraction: Check both parameters and inline HTML
     let r_user = replied_message_sender;
     let r_text = replied_message_content;
     let r_target = reply_to;
 
-    // Check if content has the inline quote (even if parameters are missing)
     const $temp_content = $("<div>").html(params.content);
     const $quote = $temp_content.find(".cc-inline-reply-quote");
-    
     if ($quote.length) {
       r_user = r_user || $quote.find(".cc-inline-reply-user").text();
       r_text = r_text || $quote.find(".cc-inline-reply-text").html();
       r_target = r_target || $quote.data("target");
       $quote.remove();
-      params.content = $temp_content.html(); // Clean the content
+      params.content = $temp_content.html();
     }
 
+    // Reply context above the bubble (Messenger style)
     if (r_user && (r_text || r_target)) {
-      const is_me_replying = sender_email === this.profile.user_email;
-      reply_header_html = `
-        <div class="cc-reply-header ${is_me_replying ? 'is-me' : ''}">
-          <i class="fa fa-reply"></i>
-          <span>${is_me_replying ? 'You' : (params.sender || 'User')} replied to ${r_user === this.profile.user_email ? (is_me_replying ? 'yourself' : 'you') : r_user}</span>
-        </div>
-      `;
+      // Use type as primary check since sender_email may be null on some messages
+      const is_me_replying = type === "sender-message" || sender_email === this.profile.user_email;
+      const trunc = (s, n) => s && s.length > n ? s.substring(0, n) + "…" : (s || "");
 
-      nested_reply_html = `
-        <div class="cc-nested-reply-quote" data-target="${r_target}">
-          <div class="cc-nested-reply-text">${r_text || ""}</div>
-        </div>
-      `;
-    }
+      // Check if r_user refers to the current user — compare against email, session user, full name
+      const my_full_name = frappe.boot && frappe.boot.user ? frappe.boot.user.full_name : null;
+      const is_me_the_target = r_user === this.profile.user_email
+        || r_user === this.profile.user
+        || r_user === "You"
+        || (my_full_name && r_user.toLowerCase() === my_full_name.toLowerCase());
 
-    if (r_user && (r_text || r_target)) {
-      $message_element.append(reply_header_html);
-      $message_element.append(nested_reply_html);
-      $message_element.addClass("has-reply");
+      const raw_sender = is_me_replying ? "You" : trunc(params.sender || r_user, 18);
+      const raw_target = is_me_the_target
+        ? (is_me_replying ? "yourself" : "you")
+        : trunc(r_user, 18);
+
+      const reply_svg = `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>`;
+      // Strip HTML from quoted text for the preview
+      const plain_text = $("<div>").html(r_text || "").text().replace(/\s+/g, " ").trim();
+      const preview_text = trunc(plain_text, 80);
+
+      const $reply_context = $(`
+        <div class="cc-reply-context" data-target="${r_target}">
+          <div class="cc-reply-meta">${reply_svg} ${raw_sender} replied to ${raw_target}</div>
+          <div class="cc-quoted-preview">${preview_text}</div>
+        </div>
+      `);
+      $message_content.append($reply_context);
     }
 
     const $main_text_container = $(document.createElement("div")).addClass("cc-bubble-main-text");

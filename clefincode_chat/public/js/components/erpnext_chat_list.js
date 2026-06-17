@@ -696,6 +696,7 @@ async render_messages(signal = null) {
       $wrapper: this.$wrapper,
       $chat_rooms_container: this.$chat_rooms_group_container,
       element: profile,
+      on_open: this.on_room_open,
     });
     chatRoom.render("append");
     this.chat_room_groups.push([profile.room, chatRoom]);
