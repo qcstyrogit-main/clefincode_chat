@@ -16,6 +16,11 @@ HIGH_LEVEL_EVENT_MAP = {
     "Custom": ["custom"],
 }
 
+WHATSAPP_NOTIFICATION_MAP_CACHE_KEY = "whatsapp_notification_map"
+WHATSAPP_NOTIFICATION_MAP_CACHE_TTL = 300
+WRAPPED_SET_VALUE_MARKER = "_clefincode_chat_whatsapp_notification_wrapped"
+ORIGINAL_SET_VALUE_ATTR = "_clefincode_chat_original_set_value"
+
 
 # ---------------------------------------------------------------------------
 
@@ -72,6 +77,10 @@ def run_server_script_for_doc_event(doc, event):
 def get_notifications_map():
 
 
+    cached_notification_map = frappe.cache().get_value(WHATSAPP_NOTIFICATION_MAP_CACHE_KEY)
+    if cached_notification_map is not None:
+        return cached_notification_map
+
     if frappe.flags.in_patch and not frappe.db.table_exists("Clefincode Notification"):
         return {}
 
@@ -93,8 +102,16 @@ def get_notifications_map():
                 .append(notif.name)
 
 
-    frappe.cache().set_value("whatsapp_notification_map", notification_map)
+    frappe.cache().set_value(
+        WHATSAPP_NOTIFICATION_MAP_CACHE_KEY,
+        notification_map,
+        expires_in_sec=WHATSAPP_NOTIFICATION_MAP_CACHE_TTL,
+    )
     return notification_map
+
+
+def clear_notifications_map_cache(*args, **kwargs):
+    frappe.cache().delete_value(WHATSAPP_NOTIFICATION_MAP_CACHE_KEY)
 
 
 # ---------------------------------------------------------------------------
@@ -145,11 +162,24 @@ def capture_old_snapshot(doc, method=None):
 
 # ---------------------------------------------------------------------------
 
-_ORIGINAL_DB_SET_VALUE = frappe.db.set_value
+_ORIGINAL_DB_SET_VALUE = getattr(frappe.db.set_value, ORIGINAL_SET_VALUE_ATTR, frappe.db.set_value)
 _patchexecuted = False
 
 
 def _patch_db_set_value_for_value_change():
+    global _ORIGINAL_DB_SET_VALUE
+
+    if getattr(frappe.db.set_value, WRAPPED_SET_VALUE_MARKER, False):
+        _ORIGINAL_DB_SET_VALUE = getattr(
+            frappe.db.set_value,
+            ORIGINAL_SET_VALUE_ATTR,
+            _ORIGINAL_DB_SET_VALUE,
+        )
+        return
+
+    original_set_value = frappe.db.set_value
+    _ORIGINAL_DB_SET_VALUE = original_set_value
+
     def wrapped_set_value(doctype, name, field=None, val=None, *args, **kwargs):
         
         if isinstance(field, dict):
@@ -202,13 +232,19 @@ def _patch_db_set_value_for_value_change():
 
         return result
 
+    setattr(wrapped_set_value, WRAPPED_SET_VALUE_MARKER, True)
+    setattr(wrapped_set_value, ORIGINAL_SET_VALUE_ATTR, original_set_value)
     frappe.db.set_value = wrapped_set_value
 
 
 def _ensure_patch():
-   
-        _patch_db_set_value_for_value_change()
-       # _patchexecuted = True
+    global _patchexecuted
+
+    if _patchexecuted and getattr(frappe.db.set_value, WRAPPED_SET_VALUE_MARKER, False):
+        return
+
+    _patch_db_set_value_for_value_change()
+    _patchexecuted = True
 
 
 

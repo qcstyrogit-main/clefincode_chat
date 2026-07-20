@@ -26,8 +26,19 @@ import base64
 
 
 class ClefincodeNotification(Document):
-    
-	
+    def after_insert(self):
+        self.clear_notification_cache()
+
+    def on_update(self):
+        self.clear_notification_cache()
+
+    def on_trash(self):
+        self.clear_notification_cache()
+
+    def clear_notification_cache(self):
+        from clefincode_chat.utils.whatsapp_notification import clear_notifications_map_cache
+
+        clear_notifications_map_cache()
 
     def validate(self):
         """Validate."""
